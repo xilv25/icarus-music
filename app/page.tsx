@@ -28,7 +28,6 @@ const getHighResCover = (url?: string) => {
   return url;
 };
 
-// Helper untuk memecah array lagu per 5 item (untuk carousel kolom)
 const chunkArray = (arr: any[], size: number) => {
   const chunked = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -43,11 +42,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [randomSongs, setRandomSongs] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Toggle View States
-  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(5);
 
   const playerRef = useRef<any>(null);
@@ -71,6 +69,10 @@ export default function Home() {
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
+  
+  // Ref untuk auto scroll lirik di kotak 1:1 saja tanpa menggeser layar utama
+  const lyricContainerRef = useRef<HTMLDivElement>(null);
+  const activeLyricRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
@@ -114,27 +116,29 @@ export default function Home() {
   const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
   const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
 
+  // Auto scroll khusus di dalam kotak lirik 1:1 (tidak menggeser layar utama)
+  useEffect(() => {
+    if (!isLyricsExpanded && activeLyricRef.current && lyricContainerRef.current) {
+      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+  }, [activeLineIndex, isLyricsExpanded]);
+
   const loadHomepageData = async (userHistory: any[]) => {
     setIsLoading(true);
-    let queries = ["Trending Pop Music", "Chill Indie Mix", "Global Viral Hits"];
-    
-    if (userHistory.length > 0) {
-      const lastArtist = userHistory[0].artists?.[0]?.name;
-      if (lastArtist) {
-        queries = [`${lastArtist} mix`, "Indie Pop Chill", "Top Hits 2026"];
-      }
-    }
-
     try {
-      const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-      const res = await fetch(`/api/search?q=${randomQuery}`);
-      const json = await res.json();
-      if (json.status === 'success') {
-        // Ambil hingga 15 lagu untuk suggest carousel (3 slide x 5 lagu)
-        setSuggestions(json.data.slice(0, 15)); 
+      const res1 = await fetch(`/api/search?q=Global Viral Hits 2026`);
+      const json1 = await res1.json();
+      if (json1.status === 'success') {
+        setSuggestions(json1.data.slice(0, 15)); 
+      }
+
+      const res2 = await fetch(`/api/search?q=Trending Chill Mix`);
+      const json2 = await res2.json();
+      if (json2.status === 'success') {
+        setRandomSongs(json2.data.slice(0, 15));
       }
     } catch (error) {
-      console.error("Gagal memuat", error);
+      console.error("Gagal memuat homepage", error);
     }
     setIsLoading(false);
   };
@@ -152,7 +156,7 @@ export default function Home() {
     setPlayedProgress(0);
     setPlayedSeconds(0);
 
-    const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20); // Batasi history max 20
+    const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20);
     setHistory(newHistory);
     localStorage.setItem('icarus_history', JSON.stringify(newHistory));
   };
@@ -185,14 +189,19 @@ export default function Home() {
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
+  // [KOREKSI 6] Progress Bar Crucial Fix (Cegah mental kembali)
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickPosition = (e.clientX - rect.left) / rect.width;
     const clampedPosition = Math.max(0, Math.min(1, clickPosition));
     
     setPlayedProgress(clampedPosition);
-    if (playerRef.current) {
-      playerRef.current.seekTo(clampedPosition, 'fraction');
+    if (duration > 0) {
+      const targetSeconds = clampedPosition * duration;
+      setPlayedSeconds(targetSeconds);
+      if (playerRef.current) {
+        playerRef.current.seekTo(targetSeconds, 'seconds');
+      }
     }
   };
 
@@ -225,8 +234,8 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // Chunk suggestions menjadi grup berisi max 5 lagu per kolom
   const suggestionColumns = chunkArray(suggestions, 5);
+  const historyColumns = chunkArray(history, 5);
 
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
@@ -282,61 +291,31 @@ export default function Home() {
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
-            {/* SECTION 1: START LISTENING (CAROUSEL KOLOM 5 LAGU ATAU FULL LIST) */}
+            {/* SECTION 1: START LISTENING (CAROUSEL DENGAN PEEK DI KANAN DAN TRUNCATE NAMA) */}
             <section>
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
                   <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
                 </div>
-                {suggestions.length > 0 && (
-                  <button 
-                    onClick={() => setShowAllSuggestions(!showAllSuggestions)}
-                    className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider px-2 py-1 bg-[#222] rounded-md"
-                  >
-                    {showAllSuggestions ? "Show Carousel" : "See All"}
-                  </button>
-                )}
+                {/* [KOREKSI 3] SEE ALL KE TAB SEARCH */}
+                <button 
+                  onClick={() => { setActiveTab('search'); setSearchQuery('Trending 2026'); }}
+                  className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider px-3 py-1 bg-[#222] rounded-md"
+                >
+                  See All
+                </button>
               </div>
 
               {isLoading ? (
                 <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
-              ) : showAllSuggestions ? (
-                /* Full List Vertikal (Tampilan See All) */
-                <div className="flex flex-col gap-1">
-                  {suggestions.map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song, suggestions, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
-                           {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
-                           {currentTrack?.videoId === song.videoId && isPlaying && (
-                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                               <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-                             </div>
-                           )}
-                        </div>
-                        <div className="flex flex-col overflow-hidden">
-                          <span className={`text-base font-medium truncate ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
-                            {song.title}
-                          </span>
-                          <span className="text-sm text-gray-400 truncate">
-                            {song.artists?.map((a: any) => a.name).join(', ')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-gray-400 px-2">
-                         <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               ) : (
-                /* Carousel Horizontal dengan Kolom Berisi 5 Lagu per Kolom */
-                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none">
+                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {suggestionColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-1 min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-start">
+                    <div key={colIdx} className="flex flex-col gap-1 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
+                        const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                         return (
                           <div 
                             key={songIdx} 
@@ -352,16 +331,17 @@ export default function Home() {
                                    </div>
                                  )}
                               </div>
-                              <div className="flex flex-col overflow-hidden">
-                                <span className={`text-base font-medium truncate ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                              {/* [KOREKSI 2] Truncate nama lagu & artis */}
+                              <div className="flex flex-col overflow-hidden pr-2">
+                                <span className={`text-base font-medium truncate w-40 sm:w-48 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
                                   {song.title}
                                 </span>
-                                <span className="text-sm text-gray-400 truncate">
-                                  {song.artists?.map((a: any) => a.name).join(', ')}
+                                <span className="text-sm text-gray-400 truncate w-40 sm:w-48">
+                                  {artistName}
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 text-gray-400 px-1">
+                            <div className="flex items-center text-gray-400 px-1">
                                <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                             </div>
                           </div>
@@ -373,13 +353,56 @@ export default function Home() {
               )}
             </section>
 
-            {/* SECTION 2: YOUR RECENT ROTATION (LIST NORMAL DENGAN SHOW MORE MENTOK 20 LAGU) */}
+            {/* SECTION 2: RECENTLY PLAYED (CAROUSEL HORIZONTAL) */}
             {history.length > 0 && (
               <section className="mt-2">
-                <h2 className="text-xl font-bold tracking-tight mb-4">Your recent rotation</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold tracking-tight">Recently Played</h2>
+                </div>
+                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
+                  {historyColumns.map((column, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-1 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
+                      {column.map((song: any, songIdx: number) => {
+                        const globalIdx = colIdx * 5 + songIdx;
+                        const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
+                        return (
+                          <div 
+                            key={songIdx} 
+                            onClick={() => playSong(song, history, globalIdx)} 
+                            className="flex items-center justify-between py-2 px-1 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
+                                 {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                              </div>
+                              <div className="flex flex-col overflow-hidden pr-2">
+                                <span className="text-base font-medium text-white truncate w-40 sm:w-48">{song.title}</span>
+                                <span className="text-sm text-gray-400 truncate w-40 sm:w-48">
+                                  {artistName}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-400 px-1">
+                               <div className="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
+                                 <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
+                               </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* SECTION 3: DAFTAR LAGU RANDOM (LIST BIASA VERTIKAL DENGAN SHOW MORE) */}
+            {randomSongs.length > 0 && (
+              <section className="mt-2">
+                <h2 className="text-xl font-bold tracking-tight mb-4">Recommended For You</h2>
                 <div className="flex flex-col gap-1">
-                  {history.slice(0, visibleHistoryCount).map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song, history, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                  {randomSongs.slice(0, visibleHistoryCount).map((song, idx) => (
+                    <div key={idx} onClick={() => playSong(song, randomSongs, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -392,20 +415,16 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-gray-400 px-2">
-                         <div className="w-5 h-5 bg-gray-300 rounded-full flex items-center justify-center">
-                           <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                         </div>
                          <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Tombol Show More (Mentok 20 Lagu) */}
-                {visibleHistoryCount < history.length && visibleHistoryCount < 20 && (
+                {visibleHistoryCount < randomSongs.length && (
                   <div className="mt-4 text-center">
                     <button 
-                      onClick={() => setVisibleHistoryCount(prev => Math.min(prev + 5, history.length, 20))}
+                      onClick={() => setVisibleHistoryCount(prev => Math.min(prev + 5, randomSongs.length))}
                       className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white py-2 px-6 bg-[#222] hover:bg-[#333] rounded-full transition-colors shadow"
                     >
                       Show more
@@ -414,6 +433,7 @@ export default function Home() {
                 )}
               </section>
             )}
+
           </div>
         )}
 
@@ -512,7 +532,7 @@ export default function Home() {
               </button>
               <div className="text-center flex flex-col">
                  <span className="text-[10px] uppercase tracking-widest text-gray-300">Playing from Icarus</span>
-                 <span className="text-xs font-bold">{activeTab === 'home' ? 'Start listening' : 'Search'}</span>
+                 <span className="text-xs font-bold">Start listening</span>
               </div>
               <button onClick={() => setIsMenuOpen(true)} className="p-2 -mr-2 text-white hover:text-gray-300">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
@@ -599,7 +619,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LYRICS SECTION */}
+            {/* LYRICS SECTION ([KOREKSI 1] AUTO SCROLL KHUSUS DI DALAM KOTAK LIRIK, TANPA GESER LAYAR UTAMA) */}
             <div className="px-6 mt-4 pb-12">
               <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] overflow-y-auto max-h-none flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
                 
@@ -617,7 +637,7 @@ export default function Home() {
                   </button>
                 </div>
                 
-                <div className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
+                <div ref={lyricContainerRef} className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
                   {isLoadingLyrics ? (
                     <div className="flex flex-col gap-4 animate-pulse pt-10">
                       <div className="h-5 bg-gray-800 rounded w-3/4"></div>
@@ -631,6 +651,7 @@ export default function Home() {
                       return (
                         <div 
                           key={idx}
+                          ref={isActive ? activeLyricRef : null}
                           className={`transition-all duration-300 leading-relaxed ${
                             isActive 
                               ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
@@ -709,4 +730,4 @@ export default function Home() {
       </div>
     </div>
   );
-                                          }
+                  }
