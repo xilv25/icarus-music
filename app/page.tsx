@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../lib/supabase'
 import { 
   Home, Search, Library, User, Play, Pause, SkipForward, SkipBack, 
   Repeat, Shuffle, Heart, MoreVertical, Plus, Check, Globe, Shield, 
