@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { supabase } from '@/lib/supabase'; // Poin 7: Menggunakan lib/supabase.ts milikmu
+import { supabase } from '../lib/supabase'; // Poin 7: Menggunakan lib/supabase.ts milikmu
 
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
