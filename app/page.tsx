@@ -1554,9 +1554,13 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
 />
                     </div>
 
-                    <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors mt-2">
-                      Simpan ke Supabase Database
-                    </button>
+                    <button
+  type="submit"
+  disabled={isSavingProfile}
+  className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors mt-2 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isSavingProfile ? 'Menyimpan...' : 'Simpan ke Supabase Database'}
+</button>
                   </form>
                 )}
 
