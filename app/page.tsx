@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('home'); // 'home' atau 'search'
+  const [activeTab, setActiveTab] = useState('home'); 
   
   // Data States
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,32 +19,28 @@ export default function Home() {
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false); // State untuk Full Screen Player
 
-  // Load History & Homepage Data on Mount
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
     loadHomepageData(savedHistory);
   }, []);
 
-  // Algoritma Rekomendasi
   const loadHomepageData = async (userHistory: any[]) => {
     setIsLoading(true);
-    let query = "Trending Pop Music"; // Default random kalau history kosong
+    let query = "Trending Pop Music"; 
     
     if (userHistory.length > 0) {
-      // Ambil vibes/artis dari lagu terakhir yang diputar
       const lastArtist = userHistory[0].artists?.[0]?.name;
-      if (lastArtist) {
-        query = `${lastArtist} mix`;
-      }
+      if (lastArtist) query = `${lastArtist} mix`;
     }
 
     try {
       const res = await fetch(`/api/search?q=${query}`);
       const json = await res.json();
       if (json.status === 'success') {
-        setSuggestions(json.data.slice(0, 8)); // Ambil 8 lagu untuk suggestion
+        setSuggestions(json.data.slice(0, 8)); 
       }
     } catch (error) {
       console.error("Gagal memuat rekomendasi", error);
@@ -52,20 +48,18 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // Fungsi Play Lagu & Simpan ke History
   const playSong = (song: any) => {
     setCurrentTrack(song);
     setIsPlaying(true);
     setIsBuffering(true);
 
-    // Update History (Maksimal simpan 10 lagu terakhir, cegah duplikat)
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 10);
     setHistory(newHistory);
     localStorage.setItem('icarus_history', JSON.stringify(newHistory));
   };
 
   const togglePlay = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) e.stopPropagation(); // Mencegah klik play/pause membuka full player
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
@@ -106,7 +100,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* TOP HEADER (Hanya tampil di Home) */}
+      {/* TOP HEADER */}
       {activeTab === 'home' && (
         <div className="sticky top-0 bg-black/90 backdrop-blur-md z-40 px-4 py-4 flex gap-3 items-center">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-xs font-bold shadow-md">
@@ -130,22 +124,19 @@ export default function Home() {
         {/* VIEW: HOME */}
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
-            
-            {/* Section: Start listening (Suggestions based on tastes) */}
+            {/* Start Listening */}
             <section>
               <p className="text-xs text-gray-400 mb-1">Jump into a session based on your tastes</p>
               <h2 className="text-2xl font-bold tracking-tight mb-4">Start listening</h2>
-              
               {isLoading ? (
                 <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
               ) : (
-                <div className="flex flex-col gap-0">
+                <div className="flex flex-col gap-1">
                   {suggestions.map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between p-2 -mx-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
-                           {/* Overlay icon play saat di hover/aktif */}
                            {currentTrack?.videoId === song.videoId && isPlaying && (
                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
@@ -161,8 +152,7 @@ export default function Home() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-gray-400">
-                         <svg className="w-5 h-5 hidden group-hover:block hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+                      <div className="flex items-center gap-4 text-gray-400 px-2">
                          <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                       </div>
                     </div>
@@ -171,13 +161,13 @@ export default function Home() {
               )}
             </section>
 
-            {/* Section: Your recent rotation (History) */}
+            {/* History */}
             {history.length > 0 && (
               <section>
                 <h2 className="text-xl font-bold tracking-tight mb-4">Your recent rotation</h2>
-                <div className="flex flex-col gap-0">
+                <div className="flex flex-col gap-1">
                   {history.map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between p-2 -mx-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -189,8 +179,7 @@ export default function Home() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-gray-400">
-                         {/* Icon Checkmark Abu-abu (bukan hijau) */}
+                      <div className="flex items-center gap-4 text-gray-400 px-2">
                          <div className="w-5 h-5 bg-gray-300 rounded-full flex items-center justify-center">
                            <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
                          </div>
@@ -221,21 +210,31 @@ export default function Home() {
               />
             </form>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* List Search Results Murni Mirip Spotify */}
+            <div className="flex flex-col gap-2">
                {isLoading ? (
-                  <div className="col-span-2 text-center text-gray-400 mt-10">Searching...</div>
+                  <div className="text-center text-gray-400 mt-10">Searching...</div>
                ) : searchResults.length > 0 ? (
                  searchResults.map((song, idx) => (
-                   <div key={idx} onClick={() => playSong(song)} className="bg-[#181818] p-3 rounded-lg flex flex-col cursor-pointer active:scale-95 transition-transform">
-                     <div className="w-full aspect-square bg-gray-800 rounded mb-3 overflow-hidden shadow-lg">
-                        {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
-                     </div>
-                     <span className="font-semibold text-sm truncate">{song.title}</span>
-                     <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                   <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="w-14 h-14 bg-gray-800 flex-shrink-0 overflow-hidden">
+                           {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                        </div>
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-base font-semibold text-white truncate">{song.title}</span>
+                          <span className="text-sm text-gray-400 truncate">
+                            Track • {song.artists?.map((a: any) => a.name).join(', ')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center px-2 text-gray-400">
+                         <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                      </div>
                    </div>
                  ))
                ) : (
-                  <div className="col-span-2 text-center text-gray-500 mt-10">Search your favorite track or artist</div>
+                  <div className="text-center text-gray-500 mt-10">Search your favorite track or artist</div>
                )}
             </div>
           </div>
@@ -243,8 +242,11 @@ export default function Home() {
       </div>
 
       {/* FLOATING MINI PLAYER */}
-      {currentTrack && (
-        <div className="fixed bottom-[72px] left-2 right-2 bg-[#2a2a2a]/95 backdrop-blur-md rounded-md p-2 flex items-center justify-between shadow-[0_8px_30px_rgba(0,0,0,0.8)] z-50 cursor-pointer">
+      {currentTrack && !isPlayerOpen && (
+        <div 
+          onClick={() => setIsPlayerOpen(true)} // Buka Full Player
+          className="fixed bottom-[72px] left-2 right-2 bg-[#2a2a2a] rounded-md p-2 flex items-center justify-between shadow-[0_8px_30px_rgba(0,0,0,0.8)] z-50 cursor-pointer hover:bg-[#333333] transition-colors"
+        >
           <div className="flex items-center gap-3 overflow-hidden flex-1">
             <div className="w-10 h-10 bg-black rounded overflow-hidden flex-shrink-0">
                {currentTrack.thumbnails?.[0]?.url && <img src={currentTrack.thumbnails[0].url} alt="cover" className="w-full h-full object-cover" />}
@@ -258,7 +260,7 @@ export default function Home() {
           <div className="flex items-center gap-4 px-2 text-white">
             <svg className="w-5 h-5 hidden sm:block hover:text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v12H4V6zm2 2v8h12V8H6z"/></svg>
             <svg className="w-5 h-5 hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
-            <div onClick={togglePlay} className="p-1 cursor-pointer">
+            <div onClick={togglePlay} className="p-2 cursor-pointer">
               {isBuffering ? (
                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : isPlaying ? (
@@ -268,12 +270,118 @@ export default function Home() {
               )}
             </div>
           </div>
-          {/* Progress Bar Bawah Player */}
           <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
             <div className="h-full bg-white w-1/3"></div>
           </div>
         </div>
       )}
+
+      {/* FULL SCREEN PLAYER OVERLAY */}
+      <div 
+        className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
+          isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
+        {currentTrack && (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-6 sticky top-0 bg-transparent z-10">
+              <button onClick={() => setIsPlayerOpen(false)} className="p-2 -ml-2">
+                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div className="text-center flex flex-col">
+                 <span className="text-[10px] uppercase tracking-widest text-gray-300">Playing from Icarus</span>
+                 <span className="text-xs font-bold">{activeTab === 'home' ? 'Start listening' : 'Search'}</span>
+              </div>
+              <button className="p-2 -mr-2">
+                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+              </button>
+            </div>
+
+            <div className="px-8 mt-2 flex flex-col items-center">
+              {/* Cover Art Besar */}
+              <div className="w-full aspect-square bg-gray-900 shadow-2xl mb-10 overflow-hidden">
+                {currentTrack.thumbnails?.[0]?.url && (
+                  <img src={currentTrack.thumbnails[currentTrack.thumbnails.length - 1].url} alt="cover" className="w-full h-full object-cover" />
+                )}
+              </div>
+
+              {/* Title & Artist */}
+              <div className="w-full flex justify-between items-center mb-8">
+                <div className="overflow-hidden mr-4">
+                  <h2 className="text-2xl font-bold truncate text-white mb-1">{currentTrack.title}</h2>
+                  <p className="text-gray-400 text-lg truncate">
+                    {currentTrack.artists?.map((a: any) => a.name).join(', ')}
+                  </p>
+                </div>
+                <button>
+                  <svg className="w-7 h-7 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full mb-6">
+                <div className="h-[4px] bg-gray-600 rounded-full w-full relative group cursor-pointer">
+                  <div className="h-full bg-white rounded-full w-1/3"></div>
+                  <div className="absolute top-1/2 left-1/3 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100"></div>
+                </div>
+                <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-2">
+                  <span>0:00</span>
+                  <span>{currentTrack.duration || '--:--'}</span>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="w-full flex items-center justify-between mb-10 px-2">
+                <button className="text-gray-400 hover:text-white">
+                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                </button>
+                <button className="text-white">
+                   <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                </button>
+                <button onClick={togglePlay} className="w-16 h-16 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
+                  {isBuffering ? (
+                    <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                  ) : isPlaying ? (
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  ) : (
+                    <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  )}
+                </button>
+                <button className="text-white">
+                   <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                </button>
+                <button className="text-gray-400 hover:text-white">
+                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* LYRICS SECTION (Scroll ke bawah) */}
+            <div className="px-6 mt-4 pb-12">
+              <div className="bg-[#1e1e1e] rounded-xl p-5 shadow-lg min-h-[350px]">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-sm font-bold tracking-wide">Lyrics</h3>
+                  <button className="bg-black/50 p-1.5 rounded-full">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                  </button>
+                </div>
+                <div className="flex flex-col gap-4 text-2xl font-bold text-gray-300">
+                  <p className="text-white drop-shadow-md transition-colors duration-300">
+                    🎵 (Instrumental Intro)
+                  </p>
+                  <p>Icarus Music Player</p>
+                  <p>Design Enterprise, UI Spotify.</p>
+                  <p className="text-xl font-normal mt-4 text-gray-500 italic">
+                    *Tampilan lirik sudah siap.*<br/>
+                    *(Fitur auto-sync API lirik bisa ditambahkan nanti di backend).*
+                  </p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
@@ -293,13 +401,13 @@ export default function Home() {
           <span className="text-[10px] font-medium">Library</span>
         </div>
 
+        {/* PROFILE MENGGANTIKAN PREMIUM */}
         <div className="flex flex-col items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-200 transition-colors">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          <span className="text-[10px] font-medium">Premium</span>
+          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          <span className="text-[10px] font-medium">Profile</span>
         </div>
 
       </div>
     </div>
   );
-        }
-          
+}
