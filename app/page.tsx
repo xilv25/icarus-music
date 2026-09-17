@@ -344,17 +344,41 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
     setIsLoading(false);
   };
 
-  const handleDeviceFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setter(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleDeviceFileUpload = (
+  e: React.ChangeEvent<HTMLInputElement>,
+  previewSetter: (value: string) => void,
+  fileSetter: (file: File | null) => void
+) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+  if (!allowedTypes.includes(file.type)) {
+    setToastMessage('Format foto harus JPG, PNG, WEBP, atau GIF.');
+    e.target.value = '';
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setToastMessage('Ukuran foto maksimal 5 MB.');
+    e.target.value = '';
+    return;
+  }
+
+  fileSetter(file);
+
+  // Hanya digunakan sebagai preview di browser.
+  // File aslinya nanti di-upload ke Supabase Storage saat tombol simpan ditekan.
+  const reader = new FileReader();
+
+  reader.onloadend = () => {
+    previewSetter(reader.result as string);
   };
 
+  reader.readAsDataURL(file);
+};
   const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
     const picToUse = overridePic !== undefined ? overridePic : profilePic;
     const nameToUse = overrideUsername !== undefined ? overrideUsername : username;
