@@ -294,17 +294,17 @@ export default function Home() {
       setIsLoadingLyrics(true);
       const fetchLyrics = async () => {
         try {
-          const artist = currentTrack.artists?.[0]?.name || '';
-          const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').split(' - ')[0] || '';
-          const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
-          if (!res.ok) throw new Error('Not found');
-          const data = await res.json();
-          setLyrics(data.lyrics);
-        } catch {
-          setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
-        } fontally {
-          setIsLoadingLyrics(false);
-        }
+  const artist = currentTrack.artists?.[0]?.name || '';
+  const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').split(' - ')[0] || '';
+  const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
+  if (!res.ok) throw new Error('Not found');
+  const data = await res.json();
+  setLyrics(data.lyrics);
+} catch {
+  setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
+} finally {
+  setIsLoadingLyrics(false);
+}
       };
       fetchLyrics();
     }
