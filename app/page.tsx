@@ -474,6 +474,33 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
     setToastMessage("Berhasil keluar akun.");
   };
 
+  const uploadProfileImage = async (
+  file: File,
+  userUid: string,
+  type: 'avatar' | 'cover'
+) => {
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const filePath = `${userUid}/${type}-${Date.now()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('profile-images')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage
+    .from('profile-images')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+};
+  
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setUsername(tempUsername);
