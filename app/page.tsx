@@ -66,14 +66,12 @@ export default function Home() {
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Lock Ref untuk cegah progress bar mental saat di-seek
   const isSeekingRef = useRef(false);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
   
-  // Ref khusus container lirik & elemen lirik aktif
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +117,7 @@ export default function Home() {
   const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
   const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
 
-  // FIX AUTO-SCROLL LIRIK (HANYA MENGGULIRKAN CONTAINER LIRIK, TANPA MENYEBABKAN SKROL PADA LAYAR / WINDOW UTAMA)
+  // Logika Autoscroll yang disempurnakan (Tepat di tengah kotak)
   useEffect(() => {
     if (!isLyricsExpanded && activeLyricRef.current && lyricContainerRef.current) {
       const container = lyricContainerRef.current;
@@ -129,7 +127,6 @@ export default function Home() {
       const activeTop = activeEl.offsetTop;
       const activeHeight = activeEl.clientHeight;
       
-      // Hitung posisi scroll internal container agar lirik aktif berada tepat di tengah kotak
       const targetScrollTop = activeTop - (containerHeight / 2) + (activeHeight / 2);
       
       container.scrollTo({
@@ -205,30 +202,24 @@ export default function Home() {
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
-  // FIX CRUCIAL PROGRESS BAR (SEEKBAR TIDAK AKAN MENTAL LAGI)
+  // Logika Seek yang disempurnakan
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duration) return;
+    if (!duration || !playerRef.current) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
-    const clickPosition = (e.clientX - rect.left) / rect.width;
-    const clampedPosition = Math.max(0, Math.min(1, clickPosition));
-    const targetSeconds = clampedPosition * duration;
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetSeconds = percentage * duration;
     
-    // Kunci updates dari onProgress sementara waktu agar tidak menimpa hasil seek
     isSeekingRef.current = true;
-    
-    // Set UI langsung ke posisi yang diklik
-    setPlayedProgress(clampedPosition);
+    setPlayedProgress(percentage);
     setPlayedSeconds(targetSeconds);
     
-    if (playerRef.current) {
-      playerRef.current.seekTo(targetSeconds, 'seconds');
-    }
+    playerRef.current.seekTo(targetSeconds, 'seconds');
     
-    // Buka kembali event listener progress setelah pemutar selesai melompat (1.2 detik)
     setTimeout(() => {
       isSeekingRef.current = false;
-    }, 1200);
+    }, 800);
   };
 
   const handleShare = () => {
@@ -272,8 +263,9 @@ export default function Home() {
         </div>
       )}
 
+      {/* PERBAIKAN 1: Player tidak disembunyikan total (display:none), melainkan dibuat transparan di luar layar agar tetap merespon perintah skip/seek */}
       {currentTrack && (
-        <div className="hidden">
+        <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
           <ReactPlayer
             ref={playerRef}
             url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
@@ -292,8 +284,8 @@ export default function Home() {
             onDuration={(dur) => setDuration(dur)}
             onEnded={handleNext}
             volume={1}
-            width="0"
-            height="0"
+            width="100%"
+            height="100%"
           />
         </div>
       )}
@@ -319,7 +311,6 @@ export default function Home() {
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
-            {/* SECTION 1: START LISTENING */}
             <section>
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -339,18 +330,19 @@ export default function Home() {
               ) : (
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {suggestionColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-1 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                         return (
+                          // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
                           <div 
                             key={songIdx} 
                             onClick={() => playSong(song, suggestions, globalIdx)} 
-                            className="flex items-center justify-between py-2 px-1 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors"
+                            className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm"
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
+                              <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
                                  {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                                  {currentTrack?.videoId === song.videoId && isPlaying && (
                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -379,7 +371,6 @@ export default function Home() {
               )}
             </section>
 
-            {/* SECTION 2: RECENTLY PLAYED */}
             {history.length > 0 && (
               <section className="mt-2">
                 <div className="flex justify-between items-center mb-4">
@@ -387,18 +378,19 @@ export default function Home() {
                 </div>
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {historyColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-1 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                         return (
+                          // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
                           <div 
                             key={songIdx} 
                             onClick={() => playSong(song, history, globalIdx)} 
-                            className="flex items-center justify-between py-2 px-1 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors"
+                            className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm"
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
+                              <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
                                  {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                               </div>
                               <div className="flex flex-col overflow-hidden pr-2">
@@ -407,11 +399,6 @@ export default function Home() {
                                   {artistName}
                                 </span>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-400 px-1">
-                               <div className="w-4 h-4 bg-gray-300 rounded-full flex items-center justify-center">
-                                 <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                               </div>
                             </div>
                           </div>
                         );
@@ -422,15 +409,15 @@ export default function Home() {
               </section>
             )}
 
-            {/* SECTION 3: RECOMMENDED FOR YOU */}
             {randomSongs.length > 0 && (
               <section className="mt-2">
                 <h2 className="text-xl font-bold tracking-tight mb-4">Recommended For You</h2>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   {randomSongs.slice(0, visibleHistoryCount).map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song, randomSongs, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                    // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
+                    <div key={idx} onClick={() => playSong(song, randomSongs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
                       <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
+                        <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden shadow-inner">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                         </div>
                         <div className="flex flex-col overflow-hidden">
@@ -451,7 +438,7 @@ export default function Home() {
                   <div className="mt-4 text-center">
                     <button 
                       onClick={() => setVisibleHistoryCount(prev => Math.min(prev + 5, randomSongs.length))}
-                      className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white py-2 px-6 bg-[#222] hover:bg-[#333] rounded-full transition-colors shadow"
+                      className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white py-2 px-6 bg-white/10 hover:bg-white/20 rounded-full transition-colors shadow"
                     >
                       Show more
                     </button>
@@ -484,9 +471,10 @@ export default function Home() {
                   <div className="text-center text-gray-400 mt-10">Searching...</div>
                ) : searchResults.length > 0 ? (
                  searchResults.map((song, idx) => (
-                   <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                   // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
+                   <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
                       <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-14 h-14 bg-gray-800 flex-shrink-0 overflow-hidden">
+                        <div className="w-14 h-14 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden shadow-inner">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                         </div>
                         <div className="flex flex-col overflow-hidden">
@@ -591,15 +579,17 @@ export default function Home() {
               <div className="w-full mb-6">
                 <div 
                   onClick={handleSeek} 
-                  className="h-[6px] bg-gray-600 rounded-full w-full relative group cursor-pointer"
+                  className="py-2 cursor-pointer group" // Memperlebar area klik agar lebih mudah digeser
                 >
-                  <div className="h-full bg-white rounded-full absolute top-0 left-0 pointer-events-none" style={{ width: `${playedProgress * 100}%` }}></div>
-                  <div 
-                     className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none" 
-                     style={{ left: `calc(${playedProgress * 100}% - 7px)` }}
-                  ></div>
+                  <div className="h-[6px] bg-gray-600 rounded-full w-full relative">
+                    <div className="h-full bg-white rounded-full absolute top-0 left-0 pointer-events-none" style={{ width: `${playedProgress * 100}%` }}></div>
+                    <div 
+                       className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none" 
+                       style={{ left: `calc(${playedProgress * 100}% - 7px)` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-2">
+                <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-1">
                   <span>{formatTime(playedSeconds)}</span>
                   <span>{formatTime(duration)}</span>
                 </div>
@@ -645,9 +635,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LYRICS SECTION (ISOLATED AUTO-SCROLL INSIDE BOX ONLY) */}
             <div className="px-6 mt-4 pb-12">
-              <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] overflow-y-auto max-h-none flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
+              <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
                 
                 <div className="flex justify-between items-center mb-6 sticky top-0 bg-inherit pt-1 pb-3 border-b border-white/10 z-10">
                   <h3 className="text-sm font-bold tracking-wide">Lyrics</h3>
@@ -663,36 +652,39 @@ export default function Home() {
                   </button>
                 </div>
                 
-                <div ref={lyricContainerRef} className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto scrollbar-none ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
-                  {isLoadingLyrics ? (
-                    <div className="flex flex-col gap-4 animate-pulse pt-10">
-                      <div className="h-5 bg-gray-800 rounded w-3/4"></div>
-                      <div className="h-5 bg-gray-800 rounded w-1/2"></div>
-                      <div className="h-5 bg-gray-800 rounded w-5/6"></div>
-                      <div className="h-5 bg-gray-800 rounded w-2/3 mt-4"></div>
-                    </div>
-                  ) : lyricLines.length > 0 ? (
-                    lyricLines.map((line, idx) => {
-                      const isActive = idx === activeLineIndex;
-                      return (
-                        <div 
-                          key={idx}
-                          ref={isActive ? activeLyricRef : null}
-                          className={`transition-all duration-300 leading-relaxed ${
-                            isActive 
-                              ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
-                              : 'text-gray-500 text-lg md:text-xl font-medium opacity-60'
-                          }`}
-                        >
-                          {line}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-gray-500 font-normal italic text-base pt-10 text-center">
-                      Lirik lagu tidak ditemukan di database publik.
-                    </p>
-                  )}
+                {/* PERBAIKAN 2: Penambahan relative pada container & padding py-[120px] agar lirik awal/akhir bisa persis ke tengah */}
+                <div ref={lyricContainerRef} className={`relative overflow-y-auto scrollbar-none ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
+                  <div className="py-[120px] flex flex-col gap-4 text-xl font-bold">
+                    {isLoadingLyrics ? (
+                      <div className="flex flex-col gap-4 animate-pulse">
+                        <div className="h-5 bg-gray-800 rounded w-3/4"></div>
+                        <div className="h-5 bg-gray-800 rounded w-1/2"></div>
+                        <div className="h-5 bg-gray-800 rounded w-5/6"></div>
+                        <div className="h-5 bg-gray-800 rounded w-2/3 mt-4"></div>
+                      </div>
+                    ) : lyricLines.length > 0 ? (
+                      lyricLines.map((line, idx) => {
+                        const isActive = idx === activeLineIndex;
+                        return (
+                          <div 
+                            key={idx}
+                            ref={isActive ? activeLyricRef : null}
+                            className={`transition-all duration-300 leading-relaxed ${
+                              isActive 
+                                ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
+                                : 'text-gray-500 text-lg md:text-xl font-medium opacity-60'
+                            }`}
+                          >
+                            {line}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-gray-500 font-normal italic text-base text-center">
+                        Lirik lagu tidak ditemukan di database publik.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
