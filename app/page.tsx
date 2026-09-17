@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
 const formatTime = (seconds: number) => {
-  if (isNaN(seconds)) return '0:00';
+  if (isNaN(seconds) || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
@@ -66,11 +66,14 @@ export default function Home() {
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Lock Ref untuk cegah progress bar mental saat di-seek
+  const isSeekingRef = useRef(false);
+
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
   
-  // Ref untuk auto scroll lirik di kotak 1:1 saja tanpa menggeser layar utama
+  // Ref khusus container lirik & elemen lirik aktif
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
@@ -116,10 +119,23 @@ export default function Home() {
   const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
   const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
 
-  // Auto scroll khusus di dalam kotak lirik 1:1 (tidak menggeser layar utama)
+  // FIX AUTO-SCROLL LIRIK (HANYA MENGGULIRKAN CONTAINER LIRIK, TANPA MENYEBABKAN SKROL PADA LAYAR / WINDOW UTAMA)
   useEffect(() => {
     if (!isLyricsExpanded && activeLyricRef.current && lyricContainerRef.current) {
-      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      const container = lyricContainerRef.current;
+      const activeEl = activeLyricRef.current;
+      
+      const containerHeight = container.clientHeight;
+      const activeTop = activeEl.offsetTop;
+      const activeHeight = activeEl.clientHeight;
+      
+      // Hitung posisi scroll internal container agar lirik aktif berada tepat di tengah kotak
+      const targetScrollTop = activeTop - (containerHeight / 2) + (activeHeight / 2);
+      
+      container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
     }
   }, [activeLineIndex, isLyricsExpanded]);
 
@@ -189,20 +205,30 @@ export default function Home() {
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
-  // [KOREKSI 6] Progress Bar Crucial Fix (Cegah mental kembali)
+  // FIX CRUCIAL PROGRESS BAR (SEEKBAR TIDAK AKAN MENTAL LAGI)
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const clickPosition = (e.clientX - rect.left) / rect.width;
     const clampedPosition = Math.max(0, Math.min(1, clickPosition));
+    const targetSeconds = clampedPosition * duration;
     
+    // Kunci updates dari onProgress sementara waktu agar tidak menimpa hasil seek
+    isSeekingRef.current = true;
+    
+    // Set UI langsung ke posisi yang diklik
     setPlayedProgress(clampedPosition);
-    if (duration > 0) {
-      const targetSeconds = clampedPosition * duration;
-      setPlayedSeconds(targetSeconds);
-      if (playerRef.current) {
-        playerRef.current.seekTo(targetSeconds, 'seconds');
-      }
+    setPlayedSeconds(targetSeconds);
+    
+    if (playerRef.current) {
+      playerRef.current.seekTo(targetSeconds, 'seconds');
     }
+    
+    // Buka kembali event listener progress setelah pemutar selesai melompat (1.2 detik)
+    setTimeout(() => {
+      isSeekingRef.current = false;
+    }, 1200);
   };
 
   const handleShare = () => {
@@ -258,8 +284,10 @@ export default function Home() {
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onProgress={({ played, playedSeconds }) => {
-              setPlayedProgress(played);
-              setPlayedSeconds(playedSeconds);
+              if (!isSeekingRef.current) {
+                setPlayedProgress(played);
+                setPlayedSeconds(playedSeconds);
+              }
             }}
             onDuration={(dur) => setDuration(dur)}
             onEnded={handleNext}
@@ -291,14 +319,13 @@ export default function Home() {
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
-            {/* SECTION 1: START LISTENING (CAROUSEL DENGAN PEEK DI KANAN DAN TRUNCATE NAMA) */}
+            {/* SECTION 1: START LISTENING */}
             <section>
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
                   <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
                 </div>
-                {/* [KOREKSI 3] SEE ALL KE TAB SEARCH */}
                 <button 
                   onClick={() => { setActiveTab('search'); setSearchQuery('Trending 2026'); }}
                   className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider px-3 py-1 bg-[#222] rounded-md"
@@ -331,7 +358,6 @@ export default function Home() {
                                    </div>
                                  )}
                               </div>
-                              {/* [KOREKSI 2] Truncate nama lagu & artis */}
                               <div className="flex flex-col overflow-hidden pr-2">
                                 <span className={`text-base font-medium truncate w-40 sm:w-48 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
                                   {song.title}
@@ -353,7 +379,7 @@ export default function Home() {
               )}
             </section>
 
-            {/* SECTION 2: RECENTLY PLAYED (CAROUSEL HORIZONTAL) */}
+            {/* SECTION 2: RECENTLY PLAYED */}
             {history.length > 0 && (
               <section className="mt-2">
                 <div className="flex justify-between items-center mb-4">
@@ -396,7 +422,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* SECTION 3: DAFTAR LAGU RANDOM (LIST BIASA VERTIKAL DENGAN SHOW MORE) */}
+            {/* SECTION 3: RECOMMENDED FOR YOU */}
             {randomSongs.length > 0 && (
               <section className="mt-2">
                 <h2 className="text-xl font-bold tracking-tight mb-4">Recommended For You</h2>
@@ -619,7 +645,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LYRICS SECTION ([KOREKSI 1] AUTO SCROLL KHUSUS DI DALAM KOTAK LIRIK, TANPA GESER LAYAR UTAMA) */}
+            {/* LYRICS SECTION (ISOLATED AUTO-SCROLL INSIDE BOX ONLY) */}
             <div className="px-6 mt-4 pb-12">
               <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] overflow-y-auto max-h-none flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
                 
@@ -637,7 +663,7 @@ export default function Home() {
                   </button>
                 </div>
                 
-                <div ref={lyricContainerRef} className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
+                <div ref={lyricContainerRef} className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto scrollbar-none ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
                   {isLoadingLyrics ? (
                     <div className="flex flex-col gap-4 animate-pulse pt-10">
                       <div className="h-5 bg-gray-800 rounded w-3/4"></div>
@@ -730,4 +756,4 @@ export default function Home() {
       </div>
     </div>
   );
-                  }
+}
