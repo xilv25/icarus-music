@@ -28,6 +28,15 @@ const getHighResCover = (url?: string) => {
   return url;
 };
 
+// Helper untuk memecah array lagu per 5 item (untuk carousel kolom)
+const chunkArray = (arr: any[], size: number) => {
+  const chunked = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunked.push(arr.slice(i, i + size));
+  }
+  return chunked;
+};
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState('home'); 
   
@@ -37,19 +46,21 @@ export default function Home() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Toggle View States
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(5);
+
   const playerRef = useRef<any>(null);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   
-  // Queue & Player Control States (Shuffle & Repeat)
   const [currentQueue, setCurrentQueue] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState<'off' | 'all' | 'one'>('off');
 
-  // Menu Titik Tiga Modal State (Poin 5)
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -60,7 +71,6 @@ export default function Home() {
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
-  const activeLyricRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
@@ -68,7 +78,6 @@ export default function Home() {
     loadHomepageData(savedHistory);
   }, []);
 
-  // Toast notification timer
   useEffect(() => {
     if (toastMessage) {
       const timer = setTimeout(() => setToastMessage(null), 2500);
@@ -105,23 +114,25 @@ export default function Home() {
   const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
   const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
 
-  useEffect(() => {
-    if (activeLyricRef.current) {
-      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [activeLineIndex]);
-
   const loadHomepageData = async (userHistory: any[]) => {
     setIsLoading(true);
-    let query = "Trending Pop Music"; 
+    let queries = ["Trending Pop Music", "Chill Indie Mix", "Global Viral Hits"];
+    
     if (userHistory.length > 0) {
       const lastArtist = userHistory[0].artists?.[0]?.name;
-      if (lastArtist) query = `${lastArtist} mix`;
+      if (lastArtist) {
+        queries = [`${lastArtist} mix`, "Indie Pop Chill", "Top Hits 2026"];
+      }
     }
+
     try {
-      const res = await fetch(`/api/search?q=${query}`);
+      const randomQuery = queries[Math.floor(Math.random() * queries.length)];
+      const res = await fetch(`/api/search?q=${randomQuery}`);
       const json = await res.json();
-      if (json.status === 'success') setSuggestions(json.data.slice(0, 8)); 
+      if (json.status === 'success') {
+        // Ambil hingga 15 lagu untuk suggest carousel (3 slide x 5 lagu)
+        setSuggestions(json.data.slice(0, 15)); 
+      }
     } catch (error) {
       console.error("Gagal memuat", error);
     }
@@ -130,21 +141,22 @@ export default function Home() {
 
   const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
-    if (queue.length > 0) {
-      setCurrentQueue(queue);
-      setCurrentIndex(index);
-    }
+    const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
+    const activeIndex = queue.length > 0 ? index : activeQueue.findIndex((s: any) => s.videoId === song.videoId);
+    
+    setCurrentQueue(activeQueue);
+    setCurrentIndex(activeIndex >= 0 ? activeIndex : 0);
+
     setIsPlaying(true);
     setIsBuffering(true);
     setPlayedProgress(0);
     setPlayedSeconds(0);
 
-    const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 10);
+    const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20); // Batasi history max 20
     setHistory(newHistory);
     localStorage.setItem('icarus_history', JSON.stringify(newHistory));
   };
 
-  // [POIN 4] Tombol Next dengan Shuffle & Repeat Logic
   const handleNext = () => {
     if (isRepeat === 'one' && currentTrack) {
       if (playerRef.current) playerRef.current.seekTo(0, 'seconds');
@@ -179,24 +191,22 @@ export default function Home() {
     const clampedPosition = Math.max(0, Math.min(1, clickPosition));
     
     setPlayedProgress(clampedPosition);
-    if (playerRef.current && duration > 0) {
-      const targetSeconds = clampedPosition * duration;
-      playerRef.current.seekTo(targetSeconds, 'seconds');
+    if (playerRef.current) {
+      playerRef.current.seekTo(clampedPosition, 'fraction');
     }
   };
 
-  // [POIN 5] Fungsi Share & Copy Link
   const handleShare = () => {
     const songUrl = `https://www.youtube.com/watch?v=${currentTrack?.videoId}`;
     if (navigator.share) {
       navigator.share({
         title: currentTrack?.title,
-        text: `Dengarkan ${currentTrack?.title} oleh ${currentTrack?.artists?.map((a:any)=>a.name).join(', ')} di Icarus Music`,
+        text: `Dengarkan ${currentTrack?.title} di Icarus Music`,
         url: songUrl,
       }).catch(() => {});
     } else {
       navigator.clipboard.writeText(songUrl);
-      setToastMessage("Tautan lagu disalin ke clipboard!");
+      setToastMessage("Tautan lagu disalin!");
     }
     setIsMenuOpen(false);
   };
@@ -215,10 +225,12 @@ export default function Home() {
     setIsLoading(false);
   };
 
+  // Chunk suggestions menjadi grup berisi max 5 lagu per kolom
+  const suggestionColumns = chunkArray(suggestions, 5);
+
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
-      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs animate-bounce">
           {toastMessage}
@@ -269,12 +281,28 @@ export default function Home() {
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
+            
+            {/* SECTION 1: START LISTENING (CAROUSEL KOLOM 5 LAGU ATAU FULL LIST) */}
             <section>
-              <p className="text-xs text-gray-400 mb-1">Jump into a session based on your tastes</p>
-              <h2 className="text-2xl font-bold tracking-tight mb-4">Start listening</h2>
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
+                  <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
+                </div>
+                {suggestions.length > 0 && (
+                  <button 
+                    onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+                    className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider px-2 py-1 bg-[#222] rounded-md"
+                  >
+                    {showAllSuggestions ? "Show Carousel" : "See All"}
+                  </button>
+                )}
+              </div>
+
               {isLoading ? (
                 <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
-              ) : (
+              ) : showAllSuggestions ? (
+                /* Full List Vertikal (Tampilan See All) */
                 <div className="flex flex-col gap-1">
                   {suggestions.map((song, idx) => (
                     <div key={idx} onClick={() => playSong(song, suggestions, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
@@ -302,14 +330,55 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                /* Carousel Horizontal dengan Kolom Berisi 5 Lagu per Kolom */
+                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none">
+                  {suggestionColumns.map((column, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-1 min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-start">
+                      {column.map((song: any, songIdx: number) => {
+                        const globalIdx = colIdx * 5 + songIdx;
+                        return (
+                          <div 
+                            key={songIdx} 
+                            onClick={() => playSong(song, suggestions, globalIdx)} 
+                            className="flex items-center justify-between py-2 px-1 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
+                                 {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                                 {currentTrack?.videoId === song.videoId && isPlaying && (
+                                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                     <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                                   </div>
+                                 )}
+                              </div>
+                              <div className="flex flex-col overflow-hidden">
+                                <span className={`text-base font-medium truncate ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                  {song.title}
+                                </span>
+                                <span className="text-sm text-gray-400 truncate">
+                                  {song.artists?.map((a: any) => a.name).join(', ')}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-400 px-1">
+                               <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
 
+            {/* SECTION 2: YOUR RECENT ROTATION (LIST NORMAL DENGAN SHOW MORE MENTOK 20 LAGU) */}
             {history.length > 0 && (
-              <section>
+              <section className="mt-2">
                 <h2 className="text-xl font-bold tracking-tight mb-4">Your recent rotation</h2>
                 <div className="flex flex-col gap-1">
-                  {history.map((song, idx) => (
+                  {history.slice(0, visibleHistoryCount).map((song, idx) => (
                     <div key={idx} onClick={() => playSong(song, history, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
@@ -331,6 +400,18 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+
+                {/* Tombol Show More (Mentok 20 Lagu) */}
+                {visibleHistoryCount < history.length && visibleHistoryCount < 20 && (
+                  <div className="mt-4 text-center">
+                    <button 
+                      onClick={() => setVisibleHistoryCount(prev => Math.min(prev + 5, history.length, 20))}
+                      className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white py-2 px-6 bg-[#222] hover:bg-[#333] rounded-full transition-colors shadow"
+                    >
+                      Show more
+                    </button>
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -417,7 +498,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* FULL SCREEN PLAYER DENGAN SHUFFLE, REPEAT & MENU TITIK TIGA (POIN 4 & 5) */}
+      {/* FULL SCREEN PLAYER */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -433,7 +514,6 @@ export default function Home() {
                  <span className="text-[10px] uppercase tracking-widest text-gray-300">Playing from Icarus</span>
                  <span className="text-xs font-bold">{activeTab === 'home' ? 'Start listening' : 'Search'}</span>
               </div>
-              {/* TOMBOL TITIK TIGA (POIN 5) */}
               <button onClick={() => setIsMenuOpen(true)} className="p-2 -mr-2 text-white hover:text-gray-300">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
               </button>
@@ -479,9 +559,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CONTROLS DENGAN TOMBOL SHUFFLE & REPEAT AKTIF (POIN 4) */}
               <div className="w-full flex items-center justify-between mb-10 px-2">
-                {/* SHUFFLE BUTTON */}
                 <button 
                   onClick={() => setIsShuffle(!isShuffle)} 
                   className={`transition-colors ${isShuffle ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
@@ -508,7 +586,6 @@ export default function Home() {
                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
                 </button>
 
-                {/* REPEAT BUTTON */}
                 <button 
                   onClick={() => setIsRepeat(isRepeat === 'off' ? 'all' : isRepeat === 'all' ? 'one' : 'off')} 
                   className={`relative transition-colors ${isRepeat !== 'off' ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
@@ -554,7 +631,6 @@ export default function Home() {
                       return (
                         <div 
                           key={idx}
-                          ref={isActive ? activeLyricRef : null}
                           className={`transition-all duration-300 leading-relaxed ${
                             isActive 
                               ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
@@ -577,7 +653,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* POP-UP MENU TITIK TIGA (POIN 5) */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
           <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -634,4 +709,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
+                                          }
