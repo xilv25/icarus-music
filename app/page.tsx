@@ -36,6 +36,10 @@ const chunkArray = (arr: any[], size: number) => {
   return chunked;
 };
 
+const generateRandomId = () => {
+  return Math.floor(1000000000 + Math.random() * 9000000000).toString();
+};
+
 export default function Home() {
   // --- AUTH & SUPABASE STATES ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -47,12 +51,11 @@ export default function Home() {
 
   // --- USER PROFILE STATES ---
   const [userId, setUserId] = useState('');
-  const [numericId, setNumericId] = useState<number>(1234567890);
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('Music lover & vibe seeker.');
   const [profilePic, setProfilePic] = useState('');
   const [coverPic, setCoverPic] = useState('');
+  const [bio, setBio] = useState('Music lover & Vibe enthusiast.');
   const [isVerified, setIsVerified] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -60,6 +63,8 @@ export default function Home() {
   // Followers / Following Modals
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followingList, setFollowingList] = useState<any[]>([]);
 
   // Search User (@) States
   const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
@@ -68,9 +73,9 @@ export default function Home() {
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempUsername, setTempUsername] = useState('');
-  const [tempBio, setTempBio] = useState('');
   const [tempProfilePic, setTempProfilePic] = useState('');
   const [tempCoverPic, setTempCoverPic] = useState('');
+  const [tempBio, setTempBio] = useState('');
 
   // --- APP NAVIGATION & STATES ---
   const [activeTab, setActiveTab] = useState('home'); 
@@ -132,15 +137,13 @@ export default function Home() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setIsLoggedIn(true);
-        setUserId(session.user.id);
         setUserEmail(session.user.email || '');
         fetchSupabaseProfile(session.user.id, session.user.email || '');
-        fetchCloudUserData(session.user.id);
       } else {
         const localAuth = localStorage.getItem('icarus_logged_in');
         const localEmail = localStorage.getItem('icarus_email');
         if (localAuth === 'true' && localEmail) {
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('profiles')
             .select('*')
             .eq('email', localEmail)
@@ -152,13 +155,10 @@ export default function Home() {
             setUserEmail(data.email);
             setUsername(data.username || '');
             setTempUsername(data.username || '');
-            setNumericId(data.numeric_id || 1234567890);
-            setBio(data.bio || 'Music lover & vibe seeker.');
-            setTempBio(data.bio || 'Music lover & vibe seeker.');
             setProfilePic(data.profile_pic || '');
             setCoverPic(data.cover_pic || '');
+            setBio(data.bio || '');
             setIsVerified(data.is_verified || false);
-            fetchCloudUserData(data.id);
           } else {
             handleLogout();
             setToastMessage("Sesi kedaluwarsa. Silakan masuk kembali.");
@@ -168,70 +168,57 @@ export default function Home() {
     };
 
     initSession();
+
+    const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
+    setHistory(savedHistory);
+
+    const savedLikes = JSON.parse(localStorage.getItem('icarus_liked_ids') || '[]');
+    setLikedSongIds(savedLikes);
+    const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
+    setLikedSongsList(savedLikedFull);
+
+    const savedPlaylists = JSON.parse(localStorage.getItem('icarus_playlists') || '[]');
+    setPlaylists(savedPlaylists);
+
     loadHomepageData();
   }, []);
 
   const fetchSupabaseProfile = async (uid: string, email: string) => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', uid)
+        .eq('email', email)
         .single();
 
       if (data) {
         setUserId(data.id);
         setUsername(data.username || email.split('@')[0]);
         setTempUsername(data.username || email.split('@')[0]);
-        setNumericId(data.numeric_id || 1234567890);
-        setBio(data.bio || 'Music lover & vibe seeker.');
-        setTempBio(data.bio || 'Music lover & vibe seeker.');
         setProfilePic(data.profile_pic || '');
         setCoverPic(data.cover_pic || '');
-        setTempProfilePic(data.profile_pic || '');
-        setTempCoverPic(data.cover_pic || '');
+        setBio(data.bio || 'Music lover & Vibe enthusiast.');
+        setTempBio(data.bio || 'Music lover & Vibe enthusiast.');
         setIsVerified(data.is_verified || false);
         setFollowersCount(data.followers_count || 0);
         setFollowingCount(data.following_count || 0);
       } else {
+        const generatedId = generateRandomId();
+        const defaultUsername = email.split('@')[0];
         await supabase.from('profiles').upsert({
-          id: uid,
+          id: generatedId,
           email: email,
-          username: email.split('@')[0],
-          bio: 'Music lover & vibe seeker.'
+          username: defaultUsername,
+          bio: 'Music lover & Vibe enthusiast.',
+          is_verified: false
         });
-        setUsername(email.split('@')[0]);
-        setTempUsername(email.split('@')[0]);
+        setUserId(generatedId);
+        setUsername(defaultUsername);
+        setTempUsername(defaultUsername);
+        setBio('Music lover & Vibe enthusiast.');
       }
     } catch (err) {
       console.error("Profile fetch error:", err);
-    }
-  };
-
-  const fetchCloudUserData = async (uid: string) => {
-    try {
-      // Fetch Liked Songs
-      const { data: likedData } = await supabase.from('liked_songs').select('*').eq('user_id', uid);
-      if (likedData && likedData.length > 0) {
-        const songs = likedData.map(item => item.song_data);
-        const ids = songs.map(s => s.videoId);
-        setLikedSongIds(ids);
-        setLikedSongsList(songs);
-      }
-
-      // Fetch Playlists
-      const { data: plData } = await supabase.from('playlists').select('*').eq('user_id', uid);
-      if (plData && plData.length > 0) {
-        setPlaylists(plData);
-      }
-
-      // Fetch Recently Played
-      const { data: historyData } = await supabase.from('recently_played').select('*').eq('user_id', uid).order('played_at', { ascending: false }).limit(20);
-      if (historyData && historyData.length > 0) {
-        setHistory(historyData.map(h => h.song_data));
-      }
-    } catch (e) {
-      console.error("Error fetching cloud user data:", e);
     }
   };
 
@@ -351,11 +338,15 @@ export default function Home() {
         });
         if (error) throw error;
         if (data.user) {
+          const generatedId = generateRandomId();
           await supabase.from('profiles').upsert({
-            id: data.user.id,
+            id: generatedId,
             email: authInput,
-            username: authInput.split('@')[0]
+            username: authInput.split('@')[0],
+            bio: 'Music lover & Vibe enthusiast.',
+            is_verified: false
           });
+          setUserId(generatedId);
         }
         setToastMessage("Akun berhasil dibuat & terdaftar di Supabase!");
       } else {
@@ -365,10 +356,8 @@ export default function Home() {
         });
         if (error) throw error;
         if (data.user) {
-          setUserId(data.user.id);
           setUserEmail(data.user.email || '');
           fetchSupabaseProfile(data.user.id, data.user.email || '');
-          fetchCloudUserData(data.user.id);
         }
         setToastMessage("Berhasil masuk!");
       }
@@ -390,6 +379,7 @@ export default function Home() {
     setUsername('');
     setProfilePic('');
     setCoverPic('');
+    setBio('');
     setIsVerified(false);
     setToastMessage("Berhasil keluar akun.");
   };
@@ -397,24 +387,24 @@ export default function Home() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setUsername(tempUsername);
-    setBio(tempBio);
     setProfilePic(tempProfilePic);
     setCoverPic(tempCoverPic);
+    setBio(tempBio);
     setIsEditingProfile(false);
 
-    if (userId) {
+    if (userEmail) {
       await supabase.from('profiles').update({
         username: tempUsername,
-        bio: tempBio,
         profile_pic: tempProfilePic,
-        cover_pic: tempCoverPic
-      }).eq('id', userId);
+        cover_pic: tempCoverPic,
+        bio: tempBio
+      }).eq('email', userEmail);
     }
 
-    setToastMessage("Profil berhasil disimpan di Supabase Database!");
+    setToastMessage("Profil berhasil diperbarui di Supabase database!");
   };
 
-  const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
+  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const id = song.videoId;
     let updatedIds = [...likedSongIds];
@@ -424,33 +414,28 @@ export default function Home() {
       updatedIds = updatedIds.filter(i => i !== id);
       updatedList = updatedList.filter(s => s.videoId !== id);
       setToastMessage("Dihapus dari Liked Songs");
-      if (userId) {
-        await supabase.from('liked_songs').delete().eq('user_id', userId).eq('song_data->>videoId', id);
-      }
     } else {
       updatedIds.push(id);
       updatedList.unshift(song);
       setToastMessage("Ditambahkan ke Liked Songs");
-      if (userId) {
-        await supabase.from('liked_songs').insert({ user_id: userId, song_data: song });
-      }
     }
 
     setLikedSongIds(updatedIds);
     setLikedSongsList(updatedList);
+    localStorage.setItem('icarus_liked_ids', JSON.stringify(updatedIds));
+    localStorage.setItem('icarus_liked_full', JSON.stringify(updatedList));
   };
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
   // --- PLAYLIST HANDLERS ---
-  const handleCreatePlaylist = async (e: React.FormEvent) => {
+  const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
 
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
     const newPlaylist = {
       id: Date.now().toString(),
-      user_id: userId,
       name: newPlaylistName.trim(),
       isCollaborative: isCollaborativePlaylist,
       collaborator: isCollaborativePlaylist ? collaboratorUsername : '',
@@ -460,69 +445,58 @@ export default function Home() {
 
     const updated = [...playlists, newPlaylist];
     setPlaylists(updated);
-
-    if (userId) {
-      await supabase.from('playlists').upsert(newPlaylist);
-    }
-
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     setNewPlaylistName('');
     setIsCollaborativePlaylist(false);
     setCollaboratorUsername('');
     setIsCreatePlaylistOpen(false);
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
-    setToastMessage("Playlist baru dibuat & tersimpan di Database!");
+    setToastMessage("Playlist baru dibuat & disimpan!");
   };
 
-  const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
+  const deletePlaylist = (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const updated = playlists.filter(pl => pl.id !== playlistId);
     setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
-
-    if (userId) {
-      await supabase.from('playlists').delete().eq('id', playlistId);
-    }
     setToastMessage("Playlist berhasil dihapus.");
   };
 
-  const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
+  const removeSongFromPlaylist = (playlistId: string, videoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const targetPl = playlists.find(pl => pl.id === playlistId);
-    if (!targetPl) return;
-
-    const filteredSongs = targetPl.songs.filter((s: any) => s.videoId !== videoId);
-    const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: filteredSongs } : pl);
+    const updated = playlists.map(pl => {
+      if (pl.id === playlistId) {
+        const filteredSongs = pl.songs.filter((s: any) => s.videoId !== videoId);
+        return { ...pl, songs: filteredSongs };
+      }
+      return pl;
+    });
     setPlaylists(updated);
-
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     if (activePlaylistView?.id === playlistId) {
-      setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
-    }
-
-    if (userId) {
-      await supabase.from('playlists').update({ songs: filteredSongs }).eq('id', playlistId);
+      setActivePlaylistView({ ...activePlaylistView, songs: activePlaylistView.songs.filter((s: any) => s.videoId !== videoId) });
     }
     setToastMessage("Lagu dihapus dari playlist.");
   };
 
-  const addSongToPlaylist = async (playlistId: string) => {
+  const addSongToPlaylist = (playlistId: string) => {
     if (!songToAddToPlaylist) return;
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
-    let targetPl = playlists.find(pl => pl.id === playlistId);
-    if (!targetPl) return;
-
-    if (!targetPl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
-      const newSongs = [...targetPl.songs, songToAddToPlaylist];
-      const newAddedBy = { ...(targetPl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
-      
-      const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: newSongs, addedBy: newAddedBy } : pl);
-      setPlaylists(updated);
-
-      if (userId) {
-        await supabase.from('playlists').update({ songs: newSongs, added_by: newAddedBy }).eq('id', playlistId);
+    const updated = playlists.map(pl => {
+      if (pl.id === playlistId) {
+        if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+          const newSongs = [...pl.songs, songToAddToPlaylist];
+          const newAddedBy = { ...(pl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+          return { ...pl, songs: newSongs, addedBy: newAddedBy };
+        }
       }
-    }
+      return pl;
+    });
 
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
     setToastMessage("Lagu ditambahkan ke playlist!");
@@ -542,7 +516,7 @@ export default function Home() {
     }));
   };
 
-  const playSong = async (song: any, queue: any[] = [], index: number = 0) => {
+  const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
     const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
     const activeIndex = queue.length > 0 ? index : activeQueue.findIndex((s: any) => s.videoId === song.videoId);
@@ -557,10 +531,7 @@ export default function Home() {
 
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20);
     setHistory(newHistory);
-
-    if (userId) {
-      await supabase.from('recently_played').insert({ user_id: userId, song_data: song });
-    }
+    localStorage.setItem('icarus_history', JSON.stringify(newHistory));
   };
 
   const handleNext = () => {
@@ -637,6 +608,7 @@ export default function Home() {
   });
 
   const suggestionColumns = chunkArray(displayedSuggestions, 5);
+  const recentlyPlayedColumns = chunkArray(history, 5);
 
   if (!isLoggedIn) {
     return (
@@ -670,12 +642,12 @@ export default function Home() {
 
           <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Email Akun Supabase</label>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Email Akun / Nomor Telpon</label>
               <input 
-                type="email" 
+                type="text" 
                 value={authInput}
                 onChange={(e) => setAuthInput(e.target.value)}
-                placeholder="nama@email.com"
+                placeholder="nama@email.com / 08123456789"
                 className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white transition-colors"
               />
             </div>
@@ -687,7 +659,7 @@ export default function Home() {
                   type={showPassword ? "text" : "password"} 
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="Minimal 6 karakter"
+                  placeholder="Masukkan password"
                   className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 pr-11 text-sm text-white focus:outline-none focus:border-white transition-colors"
                 />
                 <button 
@@ -776,6 +748,7 @@ export default function Home() {
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
+            {/* Start Listening Carousel */}
             <section>
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -849,31 +822,54 @@ export default function Home() {
               )}
             </section>
 
-            {/* --- RECENTLY PLAYED CAROUSEL (DIBWAH START LISTENING) --- */}
+            {/* Recently Played Carousel (Max 5 items per card, same format as Start Listening) */}
             {history.length > 0 && (
-              <section>
+              <section className="mt-2">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold tracking-tight">Recently Played</h2>
+                  <h2 className="text-2xl font-bold tracking-tight">Recently Played</h2>
                 </div>
-                <div className="flex overflow-x-auto gap-3 pb-2 snap-x scrollbar-none">
-                  {history.map((song: any, idx: number) => (
-                    <div 
-                      key={idx}
-                      onClick={() => playSong(song, history, idx)}
-                      className="flex flex-col gap-2 min-w-[130px] max-w-[130px] flex-shrink-0 cursor-pointer group"
-                    >
-                      <div className="w-[130px] h-[130px] rounded-xl overflow-hidden bg-gray-800 shadow-md relative">
-                        {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />}
-                      </div>
-                      <span className="text-xs font-semibold text-white truncate">{song.title}</span>
-                      <span className="text-[10px] text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
+                  {recentlyPlayedColumns.map((column, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[330px] max-w-[350px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3.5 shadow-lg">
+                      {column.map((song: any, songIdx: number) => {
+                        const globalIdx = colIdx * 5 + songIdx;
+                        const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
+                        const liked = isSongLiked(song.videoId);
+
+                        return (
+                          <div 
+                            key={songIdx} 
+                            onClick={() => playSong(song, history, globalIdx)} 
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
+                                 {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                              </div>
+                              <div className="flex flex-col overflow-hidden pr-2">
+                                <span className="text-base font-medium truncate w-32 text-white">{song.title}</span>
+                                <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
+                                {liked ? (
+                                  <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                ) : (
+                                  <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
               </section>
             )}
 
-            {/* VIBES FOR YOU SECTION */}
+            {/* Vibes For You */}
             <section className="mt-2">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold tracking-tight">Vibes For You</h2>
@@ -964,7 +960,7 @@ export default function Home() {
                   }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-black hover:text-gray-600"
                 >
-                  ✕
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               )}
             </form>
@@ -984,7 +980,7 @@ export default function Home() {
                       </div>
                       <div>
                         <h4 className="font-bold text-white text-sm">@{usr.username}</h4>
-                        <span className="text-[10px] text-gray-400">ID: {usr.numeric_id || '1234567890'}</span>
+                        <span className="text-[10px] text-gray-400">ID: {usr.id}</span>
                       </div>
                     </div>
                     <span className="text-xs bg-white text-black px-3 py-1.5 rounded-full font-semibold">Lihat Profil</span>
@@ -1104,7 +1100,6 @@ export default function Home() {
                             <span className="text-sm font-semibold truncate">{song.title}</span>
                             <span className="text-xs text-gray-400 truncate">
                               {song.artists?.map((a: any) => a.name).join(', ')} 
-                              {activePlaylistView.isCollaborative && activePlaylistView.addedBy?.[song.videoId] && ` • Ditambahkan oleh ${activePlaylistView.addedBy[song.videoId]}`}
                             </span>
                           </div>
                         </div>
@@ -1178,143 +1173,148 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: PROFILE (With Zoom/Fade Cover, Numeric ID, Real Email, Bio & Verified Star Badge) --- */}
+        {/* --- TAB: PROFILE (With Zoomed Lower Cover, Fade, Bio, Numeric ID & Real Email) --- */}
         {activeTab === 'profile' && (
-          <div className="animate-fade-in pb-12">
-            <div className="w-full px-3 pt-3">
-              <div className="w-full h-48 rounded-2xl relative overflow-hidden shadow-2xl bg-gradient-to-r from-gray-900 via-purple-950 to-black">
+          <div className="animate-fade-in pb-12 flex flex-col items-center">
+            {/* Kotakan besar dari ujung atas cover hingga bawah stats followers/following */}
+            <div className="w-full max-w-md bg-[#121212]/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md relative pb-8">
+              
+              {/* Cover Zoomed & Lower Positioned with Bottom Fade */}
+              <div className="w-full h-52 relative overflow-hidden bg-gray-900">
                 {coverPic ? (
-                  <img src={coverPic} alt="Cover" className="w-full h-full object-cover scale-105 transform" />
+                  <img src={coverPic} alt="Cover" className="w-full h-full object-cover scale-110 translate-y-2" />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-gray-900 to-indigo-950 opacity-80" />
+                  <div className="w-full h-full bg-gradient-to-r from-purple-950 via-gray-900 to-black scale-110 translate-y-2 opacity-90" />
                 )}
-                {/* Fade gradient di bagian bawah cover agar menyatu dengan background hitam */}
-                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black via-black/60 to-transparent" />
-              </div>
-            </div>
-
-            <div className="px-4 flex flex-col items-center relative -mt-16 z-10">
-              <div className="mb-3">
-                {renderAvatar("w-24 h-24 text-2xl font-bold")}
+                {/* Fade effect di bagian bawah cover agar menyatu dengan background hitam */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/30 to-[#121212]" />
               </div>
 
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <h2 className="text-2xl font-bold text-white">{username || 'User Icarus'}</h2>
-                {isVerified && (
-                  <div className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-lg shadow-blue-500/50" title="Verified Account">
-                    ✓
-                  </div>
-                )}
-              </div>
+              {/* Profile Avatar Overlapping */}
+              <div className="px-6 flex flex-col items-center relative -mt-16 z-10">
+                <div className="mb-3">
+                  {renderAvatar("w-24 h-24 text-2xl font-bold")}
+                </div>
 
-              {/* ID Angka */}
-              <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {numericId}</p>
-              {/* Email Asli User */}
-              <p className="text-xs text-gray-300 mb-2 font-medium">{userEmail || 'user@icarus.music'}</p>
-              {/* Bio User */}
-              <p className="text-xs text-gray-400 text-center max-w-xs mb-4 italic">"{bio}"</p>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <h2 className="text-2xl font-bold text-white">{username || 'User Icarus'}</h2>
+                  {isVerified && (
+                    <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow" title="Verified Account">
+                      ✓
+                    </span>
+                  )}
+                </div>
 
-              {!isEditingProfile ? (
-                <button 
-                  onClick={() => setIsEditingProfile(true)}
-                  className="bg-white text-black font-bold text-xs px-6 py-2.5 rounded-full hover:bg-gray-200 transition-transform active:scale-95 shadow-md mb-6"
-                >
-                  Edit Profil
-                </button>
-              ) : (
-                <form onSubmit={handleSaveProfile} className="w-full max-w-md flex flex-col gap-4 bg-[#141414] border border-white/10 p-5 rounded-2xl mb-6 shadow-2xl animate-fade-in">
-                  <div className="flex justify-between items-center mb-1">
-                    <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Edit Profil & Cloud Sync</h3>
-                    <button type="button" onClick={() => setIsEditingProfile(false)} className="text-xs text-gray-400 hover:text-white">Batal</button>
-                  </div>
-                  
-                  <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Username</label>
-                    <input 
-                      type="text" 
-                      value={tempUsername}
-                      onChange={(e) => setTempUsername(e.target.value)}
-                      placeholder="Masukkan username..."
-                      className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
-                    />
-                  </div>
+                {/* ID Angka & Email Asli */}
+                <p className="text-[11px] font-mono text-gray-400 mb-0.5">ID: {userId || '1234567890'}</p>
+                <p className="text-xs text-gray-400 mb-3">{userEmail || 'user@icarus.music'}</p>
 
-                  <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Bio Profil</label>
-                    <textarea 
-                      value={tempBio}
-                      onChange={(e) => setTempBio(e.target.value)}
-                      placeholder="Tulis bio singkat..."
-                      rows={2}
-                      className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-white resize-none"
-                    />
-                  </div>
+                {/* Bio Display */}
+                <p className="text-xs text-gray-300 text-center max-w-xs mb-5 italic bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+                  &ldquo;{bio}&rdquo;
+                </p>
 
-                  <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Foto Profil (Pilih dari Device)</label>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => handleDeviceFileUpload(e, setTempProfilePic)}
-                      className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Background Cover (Pilih dari Device)</label>
-                    <input 
-                      type="file" 
-                      accept="image/*,.gif"
-                      onChange={(e) => handleDeviceFileUpload(e, setTempCoverPic)}
-                      className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
-                    />
-                  </div>
-
-                  <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors mt-2">
-                    Simpan Perubahan
+                {!isEditingProfile ? (
+                  <button 
+                    onClick={() => {
+                      setTempUsername(username);
+                      setTempProfilePic(profilePic);
+                      setTempCoverPic(coverPic);
+                      setTempBio(bio);
+                      setIsEditingProfile(true);
+                    }}
+                    className="bg-white text-black font-bold text-xs px-6 py-2.5 rounded-full hover:bg-gray-200 transition-transform active:scale-95 shadow-md mb-6"
+                  >
+                    Edit Profil
                   </button>
-                </form>
-              )}
+                ) : (
+                  <form onSubmit={handleSaveProfile} className="w-full flex flex-col gap-4 bg-[#1a1a1a] border border-white/10 p-5 rounded-2xl mb-6 shadow-2xl animate-fade-in">
+                    <div className="flex justify-between items-center mb-1">
+                      <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Edit Profil & Cloud Sync</h3>
+                      <button type="button" onClick={() => setIsEditingProfile(false)} className="text-xs text-gray-400 hover:text-white">Batal</button>
+                    </div>
+                    
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Username</label>
+                      <input 
+                        type="text" 
+                        value={tempUsername}
+                        onChange={(e) => setTempUsername(e.target.value)}
+                        placeholder="Masukkan username..."
+                        className="w-full bg-[#242424] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
+                      />
+                    </div>
 
-              {/* Followers & Following Stats */}
-              <div className="grid grid-cols-4 gap-2 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
-                <div className="flex flex-col">
-                  <span className="text-base font-bold text-white">{likedSongsList.length}</span>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Songs</span>
-                </div>
-                <div className="flex flex-col border-l border-white/10">
-                  <span className="text-base font-bold text-white">{playlists.length}</span>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Playlists</span>
-                </div>
-                <div onClick={() => setIsFollowersModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
-                  <span className="text-base font-bold text-white">{followersCount}</span>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Followers</span>
-                </div>
-                <div onClick={() => setIsFollowingModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
-                  <span className="text-base font-bold text-white">{followingCount}</span>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Following</span>
-                </div>
-              </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Bio</label>
+                      <textarea 
+                        value={tempBio}
+                        onChange={(e) => setTempBio(e.target.value)}
+                        placeholder="Tulis bio singkat..."
+                        className="w-full bg-[#242424] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white resize-none h-20"
+                      />
+                    </div>
 
-              <div className="w-full max-w-md flex flex-col gap-3">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-300">Status Enkripsi Akun</span>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                    AES-256 Active
-                  </span>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Foto Profil (Device)</label>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={(e) => handleDeviceFileUpload(e, setTempProfilePic)}
+                        className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Cover / Banner (Device)</label>
+                      <input 
+                        type="file" 
+                        accept="image/*,.gif"
+                        onChange={(e) => handleDeviceFileUpload(e, setTempCoverPic)}
+                        className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
+                      />
+                    </div>
+
+                    <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors mt-2">
+                      Simpan ke Supabase Database
+                    </button>
+                  </form>
+                )}
+
+                {/* Followers & Following Stats */}
+                <div className="grid grid-cols-4 gap-2 w-full bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
+                  <div className="flex flex-col">
+                    <span className="text-base font-bold text-white">{likedSongsList.length}</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Songs</span>
+                  </div>
+                  <div className="flex flex-col border-l border-white/10">
+                    <span className="text-base font-bold text-white">{playlists.length}</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Playlists</span>
+                  </div>
+                  <div onClick={() => setIsFollowersModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
+                    <span className="text-base font-bold text-white">{followersCount}</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Followers</span>
+                  </div>
+                  <div onClick={() => setIsFollowingModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
+                    <span className="text-base font-bold text-white">{followingCount}</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide">Following</span>
+                  </div>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-300">Cloud Sync Supabase</span>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                    Connected
-                  </span>
+
+                <div className="w-full flex flex-col gap-3">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-300">Cloud Database Sync</span>
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                      Supabase Active
+                    </span>
+                  </div>
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors mt-2"
+                  >
+                    Keluar Akun (Logout)
+                  </button>
                 </div>
-                <button 
-                  onClick={handleLogout}
-                  className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors mt-2"
-                >
-                  Keluar Akun (Logout)
-                </button>
               </div>
             </div>
           </div>
@@ -1330,12 +1330,8 @@ export default function Home() {
             <div className="w-20 h-20 rounded-full bg-gray-700 overflow-hidden mb-3 border-2 border-white/20">
               {viewingProfileCard.profile_pic ? <img src={viewingProfileCard.profile_pic} className="w-full h-full object-cover" /> : viewingProfileCard.username?.[0]?.toUpperCase()}
             </div>
-            <div className="flex items-center gap-1 mb-0.5">
-              <h3 className="text-lg font-bold text-white">@{viewingProfileCard.username}</h3>
-              {viewingProfileCard.is_verified && <span className="bg-blue-500 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center">✓</span>}
-            </div>
-            <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {viewingProfileCard.numeric_id || '1234567890'}</p>
-            <p className="text-xs text-gray-400 mb-6 italic">"{viewingProfileCard.bio || 'No bio yet.'}"</p>
+            <h3 className="text-lg font-bold text-white mb-0.5">@{viewingProfileCard.username}</h3>
+            <p className="text-[11px] font-mono text-gray-400 mb-6">ID: {viewingProfileCard.id}</p>
 
             <button 
               onClick={() => {
@@ -1626,7 +1622,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* CREATE PLAYLIST MODAL */}
       {isCreatePlaylistOpen && (
         <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
@@ -1692,4 +1687,4 @@ export default function Home() {
       </div>
     </div>
   );
-            }
+}
