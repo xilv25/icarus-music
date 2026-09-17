@@ -47,8 +47,10 @@ export default function Home() {
 
   // --- USER PROFILE STATES ---
   const [userId, setUserId] = useState('');
+  const [numericId, setNumericId] = useState<number>(1234567890);
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('Music lover & vibe seeker.');
   const [profilePic, setProfilePic] = useState('');
   const [coverPic, setCoverPic] = useState('');
   const [isVerified, setIsVerified] = useState(false);
@@ -58,8 +60,6 @@ export default function Home() {
   // Followers / Following Modals
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
-  const [followersList, setFollowersList] = useState<any[]>([]);
-  const [followingList, setFollowingList] = useState<any[]>([]);
 
   // Search User (@) States
   const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
@@ -68,6 +68,7 @@ export default function Home() {
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempUsername, setTempUsername] = useState('');
+  const [tempBio, setTempBio] = useState('');
   const [tempProfilePic, setTempProfilePic] = useState('');
   const [tempCoverPic, setTempCoverPic] = useState('');
 
@@ -128,19 +129,17 @@ export default function Home() {
   // --- SUPABASE SESSION & DATA INITIALIZATION ---
   useEffect(() => {
     const initSession = async () => {
-      // Check Supabase Auth Session
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setIsLoggedIn(true);
         setUserId(session.user.id);
         setUserEmail(session.user.email || '');
         fetchSupabaseProfile(session.user.id, session.user.email || '');
+        fetchCloudUserData(session.user.id);
       } else {
-        // Fallback or local check for anomaly resolution
         const localAuth = localStorage.getItem('icarus_logged_in');
         const localEmail = localStorage.getItem('icarus_email');
         if (localAuth === 'true' && localEmail) {
-          // Verify with Supabase profiles table
           const { data, error } = await supabase
             .from('profiles')
             .select('*')
@@ -153,28 +152,22 @@ export default function Home() {
             setUserEmail(data.email);
             setUsername(data.username || '');
             setTempUsername(data.username || '');
+            setNumericId(data.numeric_id || 1234567890);
+            setBio(data.bio || 'Music lover & vibe seeker.');
+            setTempBio(data.bio || 'Music lover & vibe seeker.');
+            setProfilePic(data.profile_pic || '');
+            setCoverPic(data.cover_pic || '');
+            setIsVerified(data.is_verified || false);
+            fetchCloudUserData(data.id);
           } else {
-            // Anomaly detected: Local storage says logged in, but database/session cleared
             handleLogout();
-            setToastMessage("Sesi kedaluwarsa atau database di-reset. Silakan masuk kembali.");
+            setToastMessage("Sesi kedaluwarsa. Silakan masuk kembali.");
           }
         }
       }
     };
 
     initSession();
-
-    const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
-    setHistory(savedHistory);
-
-    const savedLikes = JSON.parse(localStorage.getItem('icarus_liked_ids') || '[]');
-    setLikedSongIds(savedLikes);
-    const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
-    setLikedSongsList(savedLikedFull);
-
-    const savedPlaylists = JSON.parse(localStorage.getItem('icarus_playlists') || '[]');
-    setPlaylists(savedPlaylists);
-
     loadHomepageData();
   }, []);
 
@@ -190,21 +183,55 @@ export default function Home() {
         setUserId(data.id);
         setUsername(data.username || email.split('@')[0]);
         setTempUsername(data.username || email.split('@')[0]);
-        if (data.is_verified || data.verified || data.verification) setIsVerified(true);
+        setNumericId(data.numeric_id || 1234567890);
+        setBio(data.bio || 'Music lover & vibe seeker.');
+        setTempBio(data.bio || 'Music lover & vibe seeker.');
+        setProfilePic(data.profile_pic || '');
+        setCoverPic(data.cover_pic || '');
+        setTempProfilePic(data.profile_pic || '');
+        setTempCoverPic(data.cover_pic || '');
+        setIsVerified(data.is_verified || false);
         setFollowersCount(data.followers_count || 0);
         setFollowingCount(data.following_count || 0);
       } else {
-        // Create profile if not exists
         await supabase.from('profiles').upsert({
           id: uid,
           email: email,
-          username: email.split('@')[0]
+          username: email.split('@')[0],
+          bio: 'Music lover & vibe seeker.'
         });
         setUsername(email.split('@')[0]);
         setTempUsername(email.split('@')[0]);
       }
     } catch (err) {
       console.error("Profile fetch error:", err);
+    }
+  };
+
+  const fetchCloudUserData = async (uid: string) => {
+    try {
+      // Fetch Liked Songs
+      const { data: likedData } = await supabase.from('liked_songs').select('*').eq('user_id', uid);
+      if (likedData && likedData.length > 0) {
+        const songs = likedData.map(item => item.song_data);
+        const ids = songs.map(s => s.videoId);
+        setLikedSongIds(ids);
+        setLikedSongsList(songs);
+      }
+
+      // Fetch Playlists
+      const { data: plData } = await supabase.from('playlists').select('*').eq('user_id', uid);
+      if (plData && plData.length > 0) {
+        setPlaylists(plData);
+      }
+
+      // Fetch Recently Played
+      const { data: historyData } = await supabase.from('recently_played').select('*').eq('user_id', uid).order('played_at', { ascending: false }).limit(20);
+      if (historyData && historyData.length > 0) {
+        setHistory(historyData.map(h => h.song_data));
+      }
+    } catch (e) {
+      console.error("Error fetching cloud user data:", e);
     }
   };
 
@@ -302,7 +329,6 @@ export default function Home() {
     );
   };
 
-  // Check if song has been played (for Recently Played / checkmark indicator)
   const isSongPlayedBefore = (videoId: string) => {
     return history.some((h: any) => h.videoId === videoId);
   };
@@ -315,14 +341,6 @@ export default function Home() {
     if (!authInput || !authPassword) {
       setAuthError("Semua kolom harus diisi!");
       return;
-    }
-
-    if (authMode === 'register') {
-      const strongRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
-      if (!strongRegex.test(authPassword)) {
-        setAuthError("Password harus minimal 8 karakter dan mengandung kombinasi huruf & angka.");
-        return;
-      }
     }
 
     try {
@@ -350,6 +368,7 @@ export default function Home() {
           setUserId(data.user.id);
           setUserEmail(data.user.email || '');
           fetchSupabaseProfile(data.user.id, data.user.email || '');
+          fetchCloudUserData(data.user.id);
         }
         setToastMessage("Berhasil masuk!");
       }
@@ -366,9 +385,6 @@ export default function Home() {
     await supabase.auth.signOut();
     localStorage.removeItem('icarus_logged_in');
     localStorage.removeItem('icarus_email');
-    localStorage.removeItem('icarus_username');
-    localStorage.removeItem('icarus_profile_pic');
-    localStorage.removeItem('icarus_cover_pic');
     setIsLoggedIn(false);
     setUserEmail('');
     setUsername('');
@@ -381,6 +397,7 @@ export default function Home() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setUsername(tempUsername);
+    setBio(tempBio);
     setProfilePic(tempProfilePic);
     setCoverPic(tempCoverPic);
     setIsEditingProfile(false);
@@ -388,18 +405,16 @@ export default function Home() {
     if (userId) {
       await supabase.from('profiles').update({
         username: tempUsername,
+        bio: tempBio,
         profile_pic: tempProfilePic,
         cover_pic: tempCoverPic
       }).eq('id', userId);
     }
 
-    localStorage.setItem('icarus_username', tempUsername);
-    localStorage.setItem('icarus_profile_pic', tempProfilePic);
-    localStorage.setItem('icarus_cover_pic', tempCoverPic);
-    setToastMessage("Profil berhasil diperbarui di database!");
+    setToastMessage("Profil berhasil disimpan di Supabase Database!");
   };
 
-  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
+  const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const id = song.videoId;
     let updatedIds = [...likedSongIds];
@@ -409,28 +424,33 @@ export default function Home() {
       updatedIds = updatedIds.filter(i => i !== id);
       updatedList = updatedList.filter(s => s.videoId !== id);
       setToastMessage("Dihapus dari Liked Songs");
+      if (userId) {
+        await supabase.from('liked_songs').delete().eq('user_id', userId).eq('song_data->>videoId', id);
+      }
     } else {
       updatedIds.push(id);
       updatedList.unshift(song);
       setToastMessage("Ditambahkan ke Liked Songs");
+      if (userId) {
+        await supabase.from('liked_songs').insert({ user_id: userId, song_data: song });
+      }
     }
 
     setLikedSongIds(updatedIds);
     setLikedSongsList(updatedList);
-    localStorage.setItem('icarus_liked_ids', JSON.stringify(updatedIds));
-    localStorage.setItem('icarus_liked_full', JSON.stringify(updatedList));
   };
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
   // --- PLAYLIST HANDLERS ---
-  const handleCreatePlaylist = (e: React.FormEvent) => {
+  const handleCreatePlaylist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
 
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
     const newPlaylist = {
       id: Date.now().toString(),
+      user_id: userId,
       name: newPlaylistName.trim(),
       isCollaborative: isCollaborativePlaylist,
       collaborator: isCollaborativePlaylist ? collaboratorUsername : '',
@@ -440,58 +460,69 @@ export default function Home() {
 
     const updated = [...playlists, newPlaylist];
     setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+
+    if (userId) {
+      await supabase.from('playlists').upsert(newPlaylist);
+    }
+
     setNewPlaylistName('');
     setIsCollaborativePlaylist(false);
     setCollaboratorUsername('');
     setIsCreatePlaylistOpen(false);
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
-    setToastMessage("Playlist baru dibuat & lagu otomatis dimasukkan!");
+    setToastMessage("Playlist baru dibuat & tersimpan di Database!");
   };
 
-  const deletePlaylist = (playlistId: string, e?: React.MouseEvent) => {
+  const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const updated = playlists.filter(pl => pl.id !== playlistId);
     setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
+
+    if (userId) {
+      await supabase.from('playlists').delete().eq('id', playlistId);
+    }
     setToastMessage("Playlist berhasil dihapus.");
   };
 
-  const removeSongFromPlaylist = (playlistId: string, videoId: string, e?: React.MouseEvent) => {
+  const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const updated = playlists.map(pl => {
-      if (pl.id === playlistId) {
-        const filteredSongs = pl.songs.filter((s: any) => s.videoId !== videoId);
-        return { ...pl, songs: filteredSongs };
-      }
-      return pl;
-    });
+    const targetPl = playlists.find(pl => pl.id === playlistId);
+    if (!targetPl) return;
+
+    const filteredSongs = targetPl.songs.filter((s: any) => s.videoId !== videoId);
+    const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: filteredSongs } : pl);
     setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+
     if (activePlaylistView?.id === playlistId) {
-      setActivePlaylistView({ ...activePlaylistView, songs: activePlaylistView.songs.filter((s: any) => s.videoId !== videoId) });
+      setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
+    }
+
+    if (userId) {
+      await supabase.from('playlists').update({ songs: filteredSongs }).eq('id', playlistId);
     }
     setToastMessage("Lagu dihapus dari playlist.");
   };
 
-  const addSongToPlaylist = (playlistId: string) => {
+  const addSongToPlaylist = async (playlistId: string) => {
     if (!songToAddToPlaylist) return;
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
-    const updated = playlists.map(pl => {
-      if (pl.id === playlistId) {
-        if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
-          const newSongs = [...pl.songs, songToAddToPlaylist];
-          const newAddedBy = { ...(pl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
-          return { ...pl, songs: newSongs, addedBy: newAddedBy };
-        }
-      }
-      return pl;
-    });
+    let targetPl = playlists.find(pl => pl.id === playlistId);
+    if (!targetPl) return;
 
-    setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    if (!targetPl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+      const newSongs = [...targetPl.songs, songToAddToPlaylist];
+      const newAddedBy = { ...(targetPl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+      
+      const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: newSongs, addedBy: newAddedBy } : pl);
+      setPlaylists(updated);
+
+      if (userId) {
+        await supabase.from('playlists').update({ songs: newSongs, added_by: newAddedBy }).eq('id', playlistId);
+      }
+    }
+
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
     setToastMessage("Lagu ditambahkan ke playlist!");
@@ -511,7 +542,7 @@ export default function Home() {
     }));
   };
 
-  const playSong = (song: any, queue: any[] = [], index: number = 0) => {
+  const playSong = async (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
     const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
     const activeIndex = queue.length > 0 ? index : activeQueue.findIndex((s: any) => s.videoId === song.videoId);
@@ -526,7 +557,10 @@ export default function Home() {
 
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20);
     setHistory(newHistory);
-    localStorage.setItem('icarus_history', JSON.stringify(newHistory));
+
+    if (userId) {
+      await supabase.from('recently_played').insert({ user_id: userId, song_data: song });
+    }
   };
 
   const handleNext = () => {
@@ -564,7 +598,6 @@ export default function Home() {
     setTimeout(() => { isSeekingRef.current = false; }, 800);
   };
 
-  // --- SEARCH HANDLER (With "@" User Search support) ---
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
@@ -573,7 +606,7 @@ export default function Home() {
     if (searchQuery.startsWith('@')) {
       const usernameQuery = searchQuery.replace('@', '').trim();
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('profiles')
           .select('*')
           .ilike('username', `%${usernameQuery}%`);
@@ -654,7 +687,7 @@ export default function Home() {
                   type={showPassword ? "text" : "password"} 
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="Minimal 8 karakter (huruf & angka)"
+                  placeholder="Minimal 6 karakter"
                   className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 pr-11 text-sm text-white focus:outline-none focus:border-white transition-colors"
                 />
                 <button 
@@ -662,11 +695,7 @@ export default function Home() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
                 >
-                  {showPassword ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                  )}
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </div>
@@ -820,7 +849,31 @@ export default function Home() {
               )}
             </section>
 
-            {/* VIBES FOR YOU / RECENTLY PLAYED CAROUSEL */}
+            {/* --- RECENTLY PLAYED CAROUSEL (DIBWAH START LISTENING) --- */}
+            {history.length > 0 && (
+              <section>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold tracking-tight">Recently Played</h2>
+                </div>
+                <div className="flex overflow-x-auto gap-3 pb-2 snap-x scrollbar-none">
+                  {history.map((song: any, idx: number) => (
+                    <div 
+                      key={idx}
+                      onClick={() => playSong(song, history, idx)}
+                      className="flex flex-col gap-2 min-w-[130px] max-w-[130px] flex-shrink-0 cursor-pointer group"
+                    >
+                      <div className="w-[130px] h-[130px] rounded-xl overflow-hidden bg-gray-800 shadow-md relative">
+                        {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />}
+                      </div>
+                      <span className="text-xs font-semibold text-white truncate">{song.title}</span>
+                      <span className="text-[10px] text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* VIBES FOR YOU SECTION */}
             <section className="mt-2">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold tracking-tight">Vibes For You</h2>
@@ -880,7 +933,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: SEARCH (With "@" User Search & Clear Button) --- */}
+        {/* --- TAB: SEARCH --- */}
         {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
@@ -911,12 +964,11 @@ export default function Home() {
                   }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-black hover:text-gray-600"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                  ✕
                 </button>
               )}
             </form>
 
-            {/* USER SEARCH RESULTS (@) */}
             {userSearchResults.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Akun Pengguna Ditemukan</h3>
@@ -932,7 +984,7 @@ export default function Home() {
                       </div>
                       <div>
                         <h4 className="font-bold text-white text-sm">@{usr.username}</h4>
-                        <span className="text-[10px] text-gray-400">ID: {usr.id.substring(0, 8)}...</span>
+                        <span className="text-[10px] text-gray-400">ID: {usr.numeric_id || '1234567890'}</span>
                       </div>
                     </div>
                     <span className="text-xs bg-white text-black px-3 py-1.5 rounded-full font-semibold">Lihat Profil</span>
@@ -953,34 +1005,6 @@ export default function Home() {
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-medium text-white truncate">{song.title}</span>
                             <span className="w-3.5 h-3.5 bg-gray-600 rounded-full flex items-center justify-center text-[9px] text-white flex-shrink-0">✓</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {history.length > 5 && historyDisplayLimit < history.length && (
-                      <button 
-                        onClick={() => setHistoryDisplayLimit(prev => Math.min(prev + 5, history.length))}
-                        className="text-xs font-bold text-gray-400 hover:text-white py-2 text-center"
-                      >
-                        Show More
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Recommended For You</h3>
-                  <div className="flex flex-col gap-1">
-                    {trendSongs.slice(0, 5).map((song: any, idx: number) => (
-                      <div key={idx} onClick={() => playSong(song, trendSongs, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
-                          </div>
-                          <div className="flex flex-col overflow-hidden">
-                            <span className="text-sm font-medium text-white truncate">{song.title}</span>
-                            <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
                           </div>
                         </div>
                       </div>
@@ -1058,7 +1082,6 @@ export default function Home() {
                       </div>
                     )}
                   </div>
-                  {/* Hapus playlist hanya lewat tombol di dalam halaman detail */}
                   {activePlaylistView.name !== 'Liked Songs' && (
                     <button 
                       onClick={(e) => deletePlaylist(activePlaylistView.id, e)}
@@ -1155,17 +1178,18 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: PROFILE (With ID Below Username & Followers Modal) --- */}
+        {/* --- TAB: PROFILE (With Zoom/Fade Cover, Numeric ID, Real Email, Bio & Verified Star Badge) --- */}
         {activeTab === 'profile' && (
           <div className="animate-fade-in pb-12">
             <div className="w-full px-3 pt-3">
-              <div className="w-full h-44 rounded-2xl relative overflow-hidden shadow-2xl bg-gradient-to-r from-gray-900 via-purple-950 to-black">
+              <div className="w-full h-48 rounded-2xl relative overflow-hidden shadow-2xl bg-gradient-to-r from-gray-900 via-purple-950 to-black">
                 {coverPic ? (
-                  <img src={coverPic} alt="Cover" className="w-full h-full object-cover" />
+                  <img src={coverPic} alt="Cover" className="w-full h-full object-cover scale-105 transform" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-gray-900 to-indigo-950 opacity-80" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                {/* Fade gradient di bagian bawah cover agar menyatu dengan background hitam */}
+                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black via-black/60 to-transparent" />
               </div>
             </div>
 
@@ -1177,14 +1201,18 @@ export default function Home() {
               <div className="flex items-center gap-1.5 mb-0.5">
                 <h2 className="text-2xl font-bold text-white">{username || 'User Icarus'}</h2>
                 {isVerified && (
-                  <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow" title="Verified Account">
+                  <div className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-lg shadow-blue-500/50" title="Verified Account">
                     ✓
-                  </span>
+                  </div>
                 )}
               </div>
-              {/* ID Pengguna tepat di bawah username */}
-              <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {userId ? userId : 'usr-icarus-2026'}</p>
-              <p className="text-xs text-gray-500 mb-5">{userEmail || 'user@icarus.music'}</p>
+
+              {/* ID Angka */}
+              <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {numericId}</p>
+              {/* Email Asli User */}
+              <p className="text-xs text-gray-300 mb-2 font-medium">{userEmail || 'user@icarus.music'}</p>
+              {/* Bio User */}
+              <p className="text-xs text-gray-400 text-center max-w-xs mb-4 italic">"{bio}"</p>
 
               {!isEditingProfile ? (
                 <button 
@@ -1196,7 +1224,7 @@ export default function Home() {
               ) : (
                 <form onSubmit={handleSaveProfile} className="w-full max-w-md flex flex-col gap-4 bg-[#141414] border border-white/10 p-5 rounded-2xl mb-6 shadow-2xl animate-fade-in">
                   <div className="flex justify-between items-center mb-1">
-                    <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Edit Profil & Perangkat</h3>
+                    <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Edit Profil & Cloud Sync</h3>
                     <button type="button" onClick={() => setIsEditingProfile(false)} className="text-xs text-gray-400 hover:text-white">Batal</button>
                   </div>
                   
@@ -1212,6 +1240,17 @@ export default function Home() {
                   </div>
 
                   <div>
+                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Bio Profil</label>
+                    <textarea 
+                      value={tempBio}
+                      onChange={(e) => setTempBio(e.target.value)}
+                      placeholder="Tulis bio singkat..."
+                      rows={2}
+                      className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-white resize-none"
+                    />
+                  </div>
+
+                  <div>
                     <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Foto Profil (Pilih dari Device)</label>
                     <input 
                       type="file" 
@@ -1222,7 +1261,7 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Background Cover / GIF (Pilih dari Device)</label>
+                    <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Background Cover (Pilih dari Device)</label>
                     <input 
                       type="file" 
                       accept="image/*,.gif"
@@ -1237,7 +1276,7 @@ export default function Home() {
                 </form>
               )}
 
-              {/* Followers & Following Stats (Clickable to open management modals) */}
+              {/* Followers & Following Stats */}
               <div className="grid grid-cols-4 gap-2 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
                 <div className="flex flex-col">
                   <span className="text-base font-bold text-white">{likedSongsList.length}</span>
@@ -1291,8 +1330,12 @@ export default function Home() {
             <div className="w-20 h-20 rounded-full bg-gray-700 overflow-hidden mb-3 border-2 border-white/20">
               {viewingProfileCard.profile_pic ? <img src={viewingProfileCard.profile_pic} className="w-full h-full object-cover" /> : viewingProfileCard.username?.[0]?.toUpperCase()}
             </div>
-            <h3 className="text-lg font-bold text-white mb-0.5">@{viewingProfileCard.username}</h3>
-            <p className="text-[11px] font-mono text-gray-400 mb-6">ID: {viewingProfileCard.id}</p>
+            <div className="flex items-center gap-1 mb-0.5">
+              <h3 className="text-lg font-bold text-white">@{viewingProfileCard.username}</h3>
+              {viewingProfileCard.is_verified && <span className="bg-blue-500 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center">✓</span>}
+            </div>
+            <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {viewingProfileCard.numeric_id || '1234567890'}</p>
+            <p className="text-xs text-gray-400 mb-6 italic">"{viewingProfileCard.bio || 'No bio yet.'}"</p>
 
             <button 
               onClick={() => {
@@ -1583,7 +1626,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* CREATE PLAYLIST MODAL (With Username Collaborative Option) */}
+      {/* CREATE PLAYLIST MODAL */}
       {isCreatePlaylistOpen && (
         <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
@@ -1649,4 +1692,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
+            }
