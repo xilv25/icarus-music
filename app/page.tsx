@@ -1,9 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
+
+// Helper function format waktu (0:00)
+const formatTime = (seconds: number) => {
+  if (isNaN(seconds)) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// Helper function untuk menjernihkan Cover Image (mengubah resolusi dari URL)
+const getHighResCover = (url?: string) => {
+  if (!url) return '';
+  // Jika URL dari Google/YT Music, ubah parameter sizenya jadi 1080x1080
+  if (url.includes('=w')) {
+    return url.replace(/=w\d+-h\d+/, '=w1080-h1080');
+  }
+  // Jika URL dari YT biasa, ganti default jadi maxresdefault
+  if (url.includes('ytimg.com')) {
+    return url.replace('hqdefault.jpg', 'maxresdefault.jpg').replace('default.jpg', 'maxresdefault.jpg');
+  }
+  return url;
+};
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('home'); 
@@ -16,10 +38,20 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Player States
+  const playerRef = useRef<any>(null);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [isPlayerOpen, setIsPlayerOpen] = useState(false); // State untuk Full Screen Player
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  
+  // Progress & Duration States
+  const [playedProgress, setPlayedProgress] = useState(0); // 0 to 1
+  const [playedSeconds, setPlayedSeconds] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Lyrics States
+  const [lyrics, setLyrics] = useState<string | null>(null);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
 
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
@@ -27,23 +59,47 @@ export default function Home() {
     loadHomepageData(savedHistory);
   }, []);
 
+  // Fetch Lyrics otomatis saat ganti lagu
+  useEffect(() => {
+    if (currentTrack) {
+      setLyrics(null);
+      setIsLoadingLyrics(true);
+      
+      const fetchLyrics = async () => {
+        try {
+          const artist = currentTrack.artists?.[0]?.name || '';
+          // Bersihkan judul lagu dari teks seperti "(Official Video)" agar API gampang nyarinya
+          const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').split(' - ')[0] || '';
+          
+          const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
+          if (!res.ok) throw new Error('Not found');
+          
+          const data = await res.json();
+          setLyrics(data.lyrics);
+        } catch (error) {
+          setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
+        } finally {
+          setIsLoadingLyrics(false);
+        }
+      };
+      
+      fetchLyrics();
+    }
+  }, [currentTrack?.videoId]);
+
   const loadHomepageData = async (userHistory: any[]) => {
     setIsLoading(true);
     let query = "Trending Pop Music"; 
-    
     if (userHistory.length > 0) {
       const lastArtist = userHistory[0].artists?.[0]?.name;
       if (lastArtist) query = `${lastArtist} mix`;
     }
-
     try {
       const res = await fetch(`/api/search?q=${query}`);
       const json = await res.json();
-      if (json.status === 'success') {
-        setSuggestions(json.data.slice(0, 8)); 
-      }
+      if (json.status === 'success') setSuggestions(json.data.slice(0, 8)); 
     } catch (error) {
-      console.error("Gagal memuat rekomendasi", error);
+      console.error("Gagal memuat", error);
     }
     setIsLoading(false);
   };
@@ -52,6 +108,8 @@ export default function Home() {
     setCurrentTrack(song);
     setIsPlaying(true);
     setIsBuffering(true);
+    setPlayedProgress(0);
+    setPlayedSeconds(0);
 
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 10);
     setHistory(newHistory);
@@ -59,8 +117,18 @@ export default function Home() {
   };
 
   const togglePlay = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation(); // Mencegah klik play/pause membuka full player
+    if (e) e.stopPropagation(); 
     if (currentTrack) setIsPlaying(!isPlaying);
+  };
+
+  // Fungsi untuk klik di progress bar buat dicepetin/dimundurin
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - bounds.left) / bounds.width;
+    setPlayedProgress(percent);
+    if (playerRef.current) {
+      playerRef.current.seekTo(percent, 'fraction');
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -70,9 +138,7 @@ export default function Home() {
     try {
       const res = await fetch(`/api/search?q=${searchQuery}`);
       const json = await res.json();
-      if (json.status === 'success') {
-        setSearchResults(json.data);
-      }
+      if (json.status === 'success') setSearchResults(json.data);
     } catch (error) {
       console.error("Gagal mencari", error);
     }
@@ -86,6 +152,7 @@ export default function Home() {
       {currentTrack && (
         <div className="hidden">
           <ReactPlayer
+            ref={playerRef}
             url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
             playing={isPlaying}
             onReady={() => setIsBuffering(false)}
@@ -93,6 +160,11 @@ export default function Home() {
             onBufferEnd={() => setIsBuffering(false)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
+            onProgress={({ played, playedSeconds }) => {
+              setPlayedProgress(played);
+              setPlayedSeconds(playedSeconds);
+            }}
+            onDuration={(dur) => setDuration(dur)}
             volume={1}
             width="0"
             height="0"
@@ -124,7 +196,6 @@ export default function Home() {
         {/* VIEW: HOME */}
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
-            {/* Start Listening */}
             <section>
               <p className="text-xs text-gray-400 mb-1">Jump into a session based on your tastes</p>
               <h2 className="text-2xl font-bold tracking-tight mb-4">Start listening</h2>
@@ -210,7 +281,6 @@ export default function Home() {
               />
             </form>
 
-            {/* List Search Results Murni Mirip Spotify */}
             <div className="flex flex-col gap-2">
                {isLoading ? (
                   <div className="text-center text-gray-400 mt-10">Searching...</div>
@@ -244,7 +314,7 @@ export default function Home() {
       {/* FLOATING MINI PLAYER */}
       {currentTrack && !isPlayerOpen && (
         <div 
-          onClick={() => setIsPlayerOpen(true)} // Buka Full Player
+          onClick={() => setIsPlayerOpen(true)}
           className="fixed bottom-[72px] left-2 right-2 bg-[#2a2a2a] rounded-md p-2 flex items-center justify-between shadow-[0_8px_30px_rgba(0,0,0,0.8)] z-50 cursor-pointer hover:bg-[#333333] transition-colors"
         >
           <div className="flex items-center gap-3 overflow-hidden flex-1">
@@ -270,8 +340,10 @@ export default function Home() {
               )}
             </div>
           </div>
+          
+          {/* Progress Bar Bawah */}
           <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
-            <div className="h-full bg-white w-1/3"></div>
+            <div className="h-full bg-white transition-all duration-300 ease-linear" style={{ width: `${playedProgress * 100}%` }}></div>
           </div>
         </div>
       )}
@@ -299,10 +371,14 @@ export default function Home() {
             </div>
 
             <div className="px-8 mt-2 flex flex-col items-center">
-              {/* Cover Art Besar */}
-              <div className="w-full aspect-square bg-gray-900 shadow-2xl mb-10 overflow-hidden">
+              {/* Cover Art Besar (Sudah HD!) */}
+              <div className="w-full aspect-square bg-gray-900 shadow-2xl mb-10 overflow-hidden rounded-md">
                 {currentTrack.thumbnails?.[0]?.url && (
-                  <img src={currentTrack.thumbnails[currentTrack.thumbnails.length - 1].url} alt="cover" className="w-full h-full object-cover" />
+                  <img 
+                    src={getHighResCover(currentTrack.thumbnails[currentTrack.thumbnails.length - 1].url)} 
+                    alt="cover" 
+                    className="w-full h-full object-cover" 
+                  />
                 )}
               </div>
 
@@ -319,15 +395,21 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Progress Bar */}
+              {/* Progress Bar (Aktif & Bisa Di-klik) */}
               <div className="w-full mb-6">
-                <div className="h-[4px] bg-gray-600 rounded-full w-full relative group cursor-pointer">
-                  <div className="h-full bg-white rounded-full w-1/3"></div>
-                  <div className="absolute top-1/2 left-1/3 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100"></div>
+                <div 
+                  onClick={handleSeek} 
+                  className="h-[4px] bg-gray-600 rounded-full w-full relative group cursor-pointer"
+                >
+                  <div className="h-full bg-white rounded-full absolute top-0 left-0" style={{ width: `${playedProgress * 100}%` }}></div>
+                  <div 
+                     className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                     style={{ left: `calc(${playedProgress * 100}% - 6px)` }}
+                  ></div>
                 </div>
                 <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-2">
-                  <span>0:00</span>
-                  <span>{currentTrack.duration || '--:--'}</span>
+                  <span>{formatTime(playedSeconds)}</span>
+                  <span>{formatTime(duration)}</span>
                 </div>
               </div>
 
@@ -357,25 +439,33 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LYRICS SECTION (Scroll ke bawah) */}
+            {/* LYRICS SECTION */}
             <div className="px-6 mt-4 pb-12">
-              <div className="bg-[#1e1e1e] rounded-xl p-5 shadow-lg min-h-[350px]">
+              <div className="bg-[#1e1e1e] rounded-xl p-6 shadow-lg min-h-[350px]">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-sm font-bold tracking-wide">Lyrics</h3>
                   <button className="bg-black/50 p-1.5 rounded-full">
                     <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
                   </button>
                 </div>
-                <div className="flex flex-col gap-4 text-2xl font-bold text-gray-300">
-                  <p className="text-white drop-shadow-md transition-colors duration-300">
-                    🎵 (Instrumental Intro)
-                  </p>
-                  <p>Icarus Music Player</p>
-                  <p>Design Enterprise, UI Spotify.</p>
-                  <p className="text-xl font-normal mt-4 text-gray-500 italic">
-                    *Tampilan lirik sudah siap.*<br/>
-                    *(Fitur auto-sync API lirik bisa ditambahkan nanti di backend).*
-                  </p>
+                
+                <div className="flex flex-col gap-4 text-xl font-bold text-gray-300">
+                  {isLoadingLyrics ? (
+                    <div className="flex flex-col gap-3 animate-pulse">
+                      <div className="h-4 bg-gray-600 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-600 rounded w-1/2"></div>
+                      <div className="h-4 bg-gray-600 rounded w-5/6"></div>
+                      <div className="h-4 bg-gray-600 rounded w-2/3 mt-4"></div>
+                    </div>
+                  ) : lyrics ? (
+                    <div className="whitespace-pre-wrap leading-relaxed text-white">
+                      {lyrics}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 font-normal italic">
+                      Lirik lagu tidak ditemukan di database publik.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -385,7 +475,6 @@ export default function Home() {
 
       {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
-        
         <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           <span className="text-[10px] font-medium">Home</span>
@@ -401,12 +490,10 @@ export default function Home() {
           <span className="text-[10px] font-medium">Library</span>
         </div>
 
-        {/* PROFILE MENGGANTIKAN PREMIUM */}
         <div className="flex flex-col items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-200 transition-colors">
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
           <span className="text-[10px] font-medium">Profile</span>
         </div>
-
       </div>
     </div>
   );
