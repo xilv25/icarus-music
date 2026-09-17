@@ -37,7 +37,7 @@ const chunkArray = (arr: any[], size: number) => {
 };
 
 export default function Home() {
-  // --- AUTH STATES ---
+  // --- AUTH & SUPABASE STATES ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authInput, setAuthInput] = useState('');
@@ -45,7 +45,8 @@ export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // --- USER PROFILE STATES (DB Integrated, Default 0) ---
+  // --- USER PROFILE STATES ---
+  const [userId, setUserId] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState('');
@@ -53,6 +54,17 @@ export default function Home() {
   const [isVerified, setIsVerified] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+
+  // Followers / Following Modals
+  const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
+  const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followingList, setFollowingList] = useState<any[]>([]);
+
+  // Search User (@) States
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [viewingProfileCard, setViewingProfileCard] = useState<any | null>(null);
+  const [isFollowingSelectedUser, setIsFollowingSelectedUser] = useState(false);
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempUsername, setTempUsername] = useState('');
@@ -73,7 +85,7 @@ export default function Home() {
   const [isFullScreenSearch, setIsFullScreenSearch] = useState(false);
   const [trendSongs, setTrendSongs] = useState<any[]>([]);
 
-  // --- LIBRARY & PLAYLIST STATES (With Delete & Collaborative) ---
+  // --- LIBRARY & PLAYLIST STATES ---
   const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
   const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<{ id: string; name: string; songs: any[]; isCollaborative?: boolean; collaborator?: string; addedBy?: { [songId: string]: string } }[]>([]);
@@ -83,7 +95,7 @@ export default function Home() {
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCollaborativePlaylist, setIsCollaborativePlaylist] = useState(false);
-  const [collaboratorEmail, setCollaboratorEmail] = useState('');
+  const [collaboratorUsername, setCollaboratorUsername] = useState('');
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
   const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
 
@@ -113,24 +125,44 @@ export default function Home() {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
+  // --- SUPABASE SESSION & DATA INITIALIZATION ---
   useEffect(() => {
-    const userAuth = localStorage.getItem('icarus_logged_in');
-    if (userAuth === 'true') setIsLoggedIn(true);
+    const initSession = async () => {
+      // Check Supabase Auth Session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setIsLoggedIn(true);
+        setUserId(session.user.id);
+        setUserEmail(session.user.email || '');
+        fetchSupabaseProfile(session.user.id, session.user.email || '');
+      } else {
+        // Fallback or local check for anomaly resolution
+        const localAuth = localStorage.getItem('icarus_logged_in');
+        const localEmail = localStorage.getItem('icarus_email');
+        if (localAuth === 'true' && localEmail) {
+          // Verify with Supabase profiles table
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', localEmail)
+            .single();
 
-    const savedEmail = localStorage.getItem('icarus_email') || '';
-    setUserEmail(savedEmail);
+          if (data) {
+            setIsLoggedIn(true);
+            setUserId(data.id);
+            setUserEmail(data.email);
+            setUsername(data.username || '');
+            setTempUsername(data.username || '');
+          } else {
+            // Anomaly detected: Local storage says logged in, but database/session cleared
+            handleLogout();
+            setToastMessage("Sesi kedaluwarsa atau database di-reset. Silakan masuk kembali.");
+          }
+        }
+      }
+    };
 
-    const savedUsername = localStorage.getItem('icarus_username') || '';
-    setUsername(savedUsername);
-    setTempUsername(savedUsername);
-
-    const savedPic = localStorage.getItem('icarus_profile_pic') || '';
-    setProfilePic(savedPic);
-    setTempProfilePic(savedPic);
-
-    const savedCover = localStorage.getItem('icarus_cover_pic') || '';
-    setCoverPic(savedCover);
-    setTempCoverPic(savedCover);
+    initSession();
 
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
@@ -146,35 +178,35 @@ export default function Home() {
     loadHomepageData();
   }, []);
 
-  // Supabase Data & Real Followers/Following Integration
-  useEffect(() => {
-    const fetchSupabaseProfile = async () => {
-      if (!userEmail) return;
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', userEmail)
-          .single();
+  const fetchSupabaseProfile = async (uid: string, email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single();
 
-        if (data) {
-          if (data.is_verified || data.verified || data.verification) {
-            setIsVerified(true);
-          }
-          if (data.username) {
-            setUsername(data.username);
-            setTempUsername(data.username);
-          }
-          // Real database stats integration
-          setFollowersCount(data.followers !== undefined ? data.followers : 0);
-          setFollowingCount(data.following !== undefined ? data.following : 0);
-        }
-      } catch (err) {
-        console.error("Supabase profile sync error:", err);
+      if (data) {
+        setUserId(data.id);
+        setUsername(data.username || email.split('@')[0]);
+        setTempUsername(data.username || email.split('@')[0]);
+        if (data.is_verified || data.verified || data.verification) setIsVerified(true);
+        setFollowersCount(data.followers_count || 0);
+        setFollowingCount(data.following_count || 0);
+      } else {
+        // Create profile if not exists
+        await supabase.from('profiles').upsert({
+          id: uid,
+          email: email,
+          username: email.split('@')[0]
+        });
+        setUsername(email.split('@')[0]);
+        setTempUsername(email.split('@')[0]);
       }
-    };
-    fetchSupabaseProfile();
-  }, [userEmail]);
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+    }
+  };
 
   useEffect(() => {
     if (toastMessage) {
@@ -270,7 +302,13 @@ export default function Home() {
     );
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Check if song has been played (for Recently Played / checkmark indicator)
+  const isSongPlayedBefore = (videoId: string) => {
+    return history.some((h: any) => h.videoId === videoId);
+  };
+
+  // --- AUTH SUBMIT (Supabase Integration) ---
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
 
@@ -287,20 +325,50 @@ export default function Home() {
       }
     }
 
-    localStorage.setItem('icarus_logged_in', 'true');
-    localStorage.setItem('icarus_email', authInput);
-    setUserEmail(authInput);
-    setIsLoggedIn(true);
-    setToastMessage(authMode === 'login' ? "Berhasil masuk!" : "Akun berhasil dibuat & terdaftar!");
+    try {
+      if (authMode === 'register') {
+        const { data, error } = await supabase.auth.signUp({
+          email: authInput,
+          password: authPassword,
+        });
+        if (error) throw error;
+        if (data.user) {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            email: authInput,
+            username: authInput.split('@')[0]
+          });
+        }
+        setToastMessage("Akun berhasil dibuat & terdaftar di Supabase!");
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authInput,
+          password: authPassword,
+        });
+        if (error) throw error;
+        if (data.user) {
+          setUserId(data.user.id);
+          setUserEmail(data.user.email || '');
+          fetchSupabaseProfile(data.user.id, data.user.email || '');
+        }
+        setToastMessage("Berhasil masuk!");
+      }
+
+      localStorage.setItem('icarus_logged_in', 'true');
+      localStorage.setItem('icarus_email', authInput);
+      setIsLoggedIn(true);
+    } catch (err: any) {
+      setAuthError(err.message || "Terjadi kesalahan autentikasi.");
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('icarus_logged_in');
     localStorage.removeItem('icarus_email');
     localStorage.removeItem('icarus_username');
     localStorage.removeItem('icarus_profile_pic');
     localStorage.removeItem('icarus_cover_pic');
-    localStorage.removeItem('icarus_is_verified');
     setIsLoggedIn(false);
     setUserEmail('');
     setUsername('');
@@ -310,17 +378,25 @@ export default function Home() {
     setToastMessage("Berhasil keluar akun.");
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setUsername(tempUsername);
     setProfilePic(tempProfilePic);
     setCoverPic(tempCoverPic);
     setIsEditingProfile(false);
 
+    if (userId) {
+      await supabase.from('profiles').update({
+        username: tempUsername,
+        profile_pic: tempProfilePic,
+        cover_pic: tempCoverPic
+      }).eq('id', userId);
+    }
+
     localStorage.setItem('icarus_username', tempUsername);
     localStorage.setItem('icarus_profile_pic', tempProfilePic);
     localStorage.setItem('icarus_cover_pic', tempCoverPic);
-    setToastMessage("Profil berhasil diperbarui!");
+    setToastMessage("Profil berhasil diperbarui di database!");
   };
 
   const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
@@ -347,18 +423,19 @@ export default function Home() {
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
-  // --- PLAYLIST HANDLERS (With Delete & Collaborative Contributors) ---
+  // --- PLAYLIST HANDLERS ---
   const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
 
+    const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
     const newPlaylist = {
       id: Date.now().toString(),
       name: newPlaylistName.trim(),
       isCollaborative: isCollaborativePlaylist,
-      collaborator: isCollaborativePlaylist ? collaboratorEmail : '',
+      collaborator: isCollaborativePlaylist ? collaboratorUsername : '',
       songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
-      addedBy: songToAddToPlaylist ? { [songToAddToPlaylist.videoId]: username || userEmail } : {}
+      addedBy: songToAddToPlaylist ? { [songToAddToPlaylist.videoId]: currentUserTag } : {}
     };
 
     const updated = [...playlists, newPlaylist];
@@ -366,7 +443,7 @@ export default function Home() {
     localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     setNewPlaylistName('');
     setIsCollaborativePlaylist(false);
-    setCollaboratorEmail('');
+    setCollaboratorUsername('');
     setIsCreatePlaylistOpen(false);
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
@@ -382,9 +459,26 @@ export default function Home() {
     setToastMessage("Playlist berhasil dihapus.");
   };
 
+  const removeSongFromPlaylist = (playlistId: string, videoId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const updated = playlists.map(pl => {
+      if (pl.id === playlistId) {
+        const filteredSongs = pl.songs.filter((s: any) => s.videoId !== videoId);
+        return { ...pl, songs: filteredSongs };
+      }
+      return pl;
+    });
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    if (activePlaylistView?.id === playlistId) {
+      setActivePlaylistView({ ...activePlaylistView, songs: activePlaylistView.songs.filter((s: any) => s.videoId !== videoId) });
+    }
+    setToastMessage("Lagu dihapus dari playlist.");
+  };
+
   const addSongToPlaylist = (playlistId: string) => {
     if (!songToAddToPlaylist) return;
-    const currentUserTag = username || userEmail || 'Anda';
+    const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
     const updated = playlists.map(pl => {
       if (pl.id === playlistId) {
         if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
@@ -403,13 +497,12 @@ export default function Home() {
     setToastMessage("Lagu ditambahkan ke playlist!");
   };
 
-  // Calculate contributor percentage for collaborative playlists
   const getContributorStats = (playlist: any) => {
     if (!playlist.songs || playlist.songs.length === 0) return [];
     const counts: { [key: string]: number } = {};
     const total = playlist.songs.length;
     playlist.songs.forEach((song: any) => {
-      const u = playlist.addedBy?.[song.videoId] || 'Owner';
+      const u = playlist.addedBy?.[song.videoId] || username || 'Owner';
       counts[u] = (counts[u] || 0) + 1;
     });
     return Object.keys(counts).map(user => ({
@@ -471,15 +564,34 @@ export default function Home() {
     setTimeout(() => { isSeekingRef.current = false; }, 800);
   };
 
+  // --- SEARCH HANDLER (With "@" User Search support) ---
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
     setIsLoading(true);
-    try {
-      const res = await fetch(`/api/search?q=${searchQuery}`);
-      const json = await res.json();
-      if (json.status === 'success') setSearchResults(json.data);
-    } catch (e) { console.error(e); }
+
+    if (searchQuery.startsWith('@')) {
+      const usernameQuery = searchQuery.replace('@', '').trim();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .ilike('username', `%${usernameQuery}%`);
+        if (data) {
+          setUserSearchResults(data);
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error("User search error:", err);
+      }
+    } else {
+      setUserSearchResults([]);
+      try {
+        const res = await fetch(`/api/search?q=${searchQuery}`);
+        const json = await res.json();
+        if (json.status === 'success') setSearchResults(json.data);
+      } catch (e) { console.error(e); }
+    }
     setIsLoading(false);
   };
 
@@ -525,12 +637,12 @@ export default function Home() {
 
           <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Email atau Nomor Telepon</label>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Email Akun Supabase</label>
               <input 
-                type="text" 
+                type="email" 
                 value={authInput}
                 onChange={(e) => setAuthInput(e.target.value)}
-                placeholder="nama@email.com / 0812345..."
+                placeholder="nama@email.com"
                 className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white transition-colors"
               />
             </div>
@@ -563,21 +675,6 @@ export default function Home() {
               {authMode === 'login' ? 'Masuk' : 'Daftar Akun'}
             </button>
           </form>
-
-          <div className="relative flex py-4 items-center">
-            <div className="flex-grow border-t border-white/10"></div>
-            <span className="flex-shrink mx-4 text-gray-500 text-[10px] uppercase">Atau masuk dengan</span>
-            <div className="flex-grow border-t border-white/10"></div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => { setIsLoggedIn(true); setUserEmail('user@google.com'); localStorage.setItem('icarus_email', 'user@google.com'); setToastMessage("Berhasil masuk via Google!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
-               Google
-            </button>
-            <button onClick={() => { setIsLoggedIn(true); setUserEmail('user@facebook.com'); localStorage.setItem('icarus_email', 'user@facebook.com'); setToastMessage("Berhasil masuk via Facebook!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
-               Facebook
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -667,7 +764,6 @@ export default function Home() {
               {isLoading ? (
                 <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
               ) : (
-                /* UPDATE 2: Carousel sedikit diperlebar tapi tidak sampai mentok kanan */
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {suggestionColumns.map((column, colIdx) => (
                     <div key={colIdx} className="flex flex-col gap-2 min-w-[330px] max-w-[350px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3.5 shadow-lg">
@@ -675,6 +771,7 @@ export default function Home() {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                         const liked = isSongLiked(song.videoId);
+                        const playedBefore = isSongPlayedBefore(song.videoId);
 
                         return (
                           <div 
@@ -692,9 +789,16 @@ export default function Home() {
                                  )}
                               </div>
                               <div className="flex flex-col overflow-hidden pr-2">
-                                <span className={`text-base font-medium truncate w-36 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                  {song.title}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-base font-medium truncate w-32 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                    {song.title}
+                                  </span>
+                                  {playedBefore && (
+                                    <span className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center text-[10px] text-white flex-shrink-0" title="Pernah diputar">
+                                      ✓
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
@@ -706,16 +810,6 @@ export default function Home() {
                                   <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                                 )}
                               </button>
-                              <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  setCurrentTrack(song);
-                                  setIsMenuOpen(true); 
-                                }} 
-                                className="p-1 text-gray-400 hover:text-white"
-                              >
-                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                              </button>
                             </div>
                           </div>
                         );
@@ -726,7 +820,7 @@ export default function Home() {
               )}
             </section>
 
-            {/* UPDATE 1: Lagu satuan di luar carousel tanpa kotakan */}
+            {/* VIBES FOR YOU / RECENTLY PLAYED CAROUSEL */}
             <section className="mt-2">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold tracking-tight">Vibes For You</h2>
@@ -735,6 +829,8 @@ export default function Home() {
                 {randomSongs.slice(0, randomSongsLimit).map((song: any, idx: number) => {
                   const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                   const liked = isSongLiked(song.videoId);
+                  const playedBefore = isSongPlayedBefore(song.videoId);
+
                   return (
                     <div 
                       key={idx} 
@@ -746,7 +842,14 @@ export default function Home() {
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                          <span className="text-sm font-semibold text-white truncate">{song.title}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-semibold text-white truncate">{song.title}</span>
+                            {playedBefore && (
+                              <span className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center text-[10px] text-white flex-shrink-0" title="Pernah diputar">
+                                ✓
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-gray-400 truncate">{artistName}</span>
                         </div>
                       </div>
@@ -757,9 +860,6 @@ export default function Home() {
                           ) : (
                             <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                           )}
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setCurrentTrack(song); setIsMenuOpen(true); }} className="p-1 text-gray-400 hover:text-white">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                         </button>
                       </div>
                     </div>
@@ -780,7 +880,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: SEARCH (With Clear Button & History / Recommendations) --- */}
+        {/* --- TAB: SEARCH (With "@" User Search & Clear Button) --- */}
         {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
@@ -795,18 +895,19 @@ export default function Home() {
                   setSearchQuery(e.target.value);
                   if (!e.target.value.trim()) {
                     setSearchResults([]);
+                    setUserSearchResults([]);
                   }
                 }}
                 className="w-full bg-white text-black font-semibold pl-10 pr-10 py-3 rounded-md focus:outline-none placeholder-gray-500" 
-                placeholder="What do you want to listen to?" 
+                placeholder="Cari lagu atau gunakan '@username'..." 
               />
-              {/* UPDATE 3: Tombol silang untuk hapus cepat di searchbar */}
               {searchQuery && (
                 <button 
                   type="button"
                   onClick={() => {
                     setSearchQuery('');
                     setSearchResults([]);
+                    setUserSearchResults([]);
                   }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-black hover:text-gray-600"
                 >
@@ -815,8 +916,30 @@ export default function Home() {
               )}
             </form>
 
-            {/* UPDATE 3: Saat input kosong / tombol silang ditekan, tampilkan search history max 5 + show more + rekomendasi lagu */}
-            {!searchQuery.trim() && searchResults.length === 0 ? (
+            {/* USER SEARCH RESULTS (@) */}
+            {userSearchResults.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Akun Pengguna Ditemukan</h3>
+                {userSearchResults.map((usr: any) => (
+                  <div 
+                    key={usr.id} 
+                    onClick={() => { setViewingProfileCard(usr); setIsFollowingSelectedUser(false); }}
+                    className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gray-700 rounded-full overflow-hidden flex items-center justify-center font-bold">
+                        {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-white text-sm">@{usr.username}</h4>
+                        <span className="text-[10px] text-gray-400">ID: {usr.id.substring(0, 8)}...</span>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-white text-black px-3 py-1.5 rounded-full font-semibold">Lihat Profil</span>
+                  </div>
+                ))}
+              </div>
+            ) : !searchQuery.trim() && searchResults.length === 0 ? (
               <div className="flex flex-col gap-6">
                 <div>
                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Recent History</h3>
@@ -827,7 +950,10 @@ export default function Home() {
                           <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                             {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
                           </div>
-                          <span className="text-sm font-medium text-white truncate">{song.title}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-white truncate">{song.title}</span>
+                            <span className="w-3.5 h-3.5 bg-gray-600 rounded-full flex items-center justify-center text-[9px] text-white flex-shrink-0">✓</span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -921,7 +1047,7 @@ export default function Home() {
                     <p className="text-xs text-gray-400">{activePlaylistView.songs.length} lagu di dalam playlist ini</p>
                     {activePlaylistView.isCollaborative && (
                       <div className="mt-2 flex flex-col gap-1">
-                        <span className="text-[11px] text-purple-400 font-bold">🤝 Collaborative Playlist (Shared with {activePlaylistView.collaborator || 'Friend'})</span>
+                        <span className="text-[11px] text-purple-400 font-bold">🤝 Collaborative Playlist (Shared with @{activePlaylistView.collaborator || 'Friend'})</span>
                         <div className="flex gap-2 text-[10px] text-gray-300">
                           {getContributorStats(activePlaylistView).map((stat: any, sIdx: number) => (
                             <span key={sIdx} className="bg-white/10 px-2 py-0.5 rounded">
@@ -932,18 +1058,21 @@ export default function Home() {
                       </div>
                     )}
                   </div>
-                  <button 
-                    onClick={(e) => deletePlaylist(activePlaylistView.id, e)}
-                    className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors"
-                  >
-                    Hapus Playlist
-                  </button>
+                  {/* Hapus playlist hanya lewat tombol di dalam halaman detail */}
+                  {activePlaylistView.name !== 'Liked Songs' && (
+                    <button 
+                      onClick={(e) => deletePlaylist(activePlaylistView.id, e)}
+                      className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors"
+                    >
+                      Hapus Playlist
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
                   {activePlaylistView.songs.length > 0 ? (
                     activePlaylistView.songs.map((song: any, idx: number) => (
-                      <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer">
+                      <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer group">
                         <div className="flex items-center gap-3 overflow-hidden">
                           <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                             {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
@@ -955,6 +1084,21 @@ export default function Home() {
                               {activePlaylistView.isCollaborative && activePlaylistView.addedBy?.[song.videoId] && ` • Ditambahkan oleh ${activePlaylistView.addedBy[song.videoId]}`}
                             </span>
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {activePlaylistView.name === 'Liked Songs' ? (
+                            <button onClick={(e) => toggleLikeSong(song, e)} className="p-1 text-white fill-white">
+                              <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={(e) => removeSongFromPlaylist(activePlaylistView.id, song.videoId, e)} 
+                              className="text-gray-400 hover:text-red-400 text-xs px-2 py-1 bg-white/5 rounded-lg"
+                              title="Hapus dari playlist"
+                            >
+                              Unplaylist
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1000,13 +1144,6 @@ export default function Home() {
                             </p>
                           </div>
                         </div>
-                        <button 
-                          onClick={(e) => deletePlaylist(pl.id, e)}
-                          className="text-gray-500 hover:text-red-400 p-2"
-                          title="Hapus Playlist"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                        </button>
                       </div>
                     ))
                   ) : (
@@ -1018,7 +1155,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: PROFILE (Real Database Followers & Following) --- */}
+        {/* --- TAB: PROFILE (With ID Below Username & Followers Modal) --- */}
         {activeTab === 'profile' && (
           <div className="animate-fade-in pb-12">
             <div className="w-full px-3 pt-3">
@@ -1037,7 +1174,7 @@ export default function Home() {
                 {renderAvatar("w-24 h-24 text-2xl font-bold")}
               </div>
 
-              <div className="flex items-center gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5 mb-0.5">
                 <h2 className="text-2xl font-bold text-white">{username || 'User Icarus'}</h2>
                 {isVerified && (
                   <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow" title="Verified Account">
@@ -1045,7 +1182,9 @@ export default function Home() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mb-5">{userEmail || 'user@icarus.music'}</p>
+              {/* ID Pengguna tepat di bawah username */}
+              <p className="text-[11px] font-mono text-gray-400 mb-1">ID: {userId ? userId : 'usr-icarus-2026'}</p>
+              <p className="text-xs text-gray-500 mb-5">{userEmail || 'user@icarus.music'}</p>
 
               {!isEditingProfile ? (
                 <button 
@@ -1098,7 +1237,7 @@ export default function Home() {
                 </form>
               )}
 
-              {/* UPDATE 5: Followers & Following langsung dari Database (Real DB stats) */}
+              {/* Followers & Following Stats (Clickable to open management modals) */}
               <div className="grid grid-cols-4 gap-2 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
                 <div className="flex flex-col">
                   <span className="text-base font-bold text-white">{likedSongsList.length}</span>
@@ -1108,11 +1247,11 @@ export default function Home() {
                   <span className="text-base font-bold text-white">{playlists.length}</span>
                   <span className="text-[10px] text-gray-400 uppercase tracking-wide">Playlists</span>
                 </div>
-                <div className="flex flex-col border-l border-white/10">
+                <div onClick={() => setIsFollowersModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
                   <span className="text-base font-bold text-white">{followersCount}</span>
                   <span className="text-[10px] text-gray-400 uppercase tracking-wide">Followers</span>
                 </div>
-                <div className="flex flex-col border-l border-white/10">
+                <div onClick={() => setIsFollowingModalOpen(true)} className="flex flex-col border-l border-white/10 cursor-pointer hover:bg-white/5 rounded-lg py-1">
                   <span className="text-base font-bold text-white">{followingCount}</span>
                   <span className="text-[10px] text-gray-400 uppercase tracking-wide">Following</span>
                 </div>
@@ -1143,6 +1282,57 @@ export default function Home() {
         )}
 
       </div>
+
+      {/* --- MODAL: VIEW OTHER USER PROFILE CARD --- */}
+      {viewingProfileCard && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewingProfileCard(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-3xl p-6 flex flex-col items-center text-center shadow-2xl relative">
+            <button onClick={() => setViewingProfileCard(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
+            <div className="w-20 h-20 rounded-full bg-gray-700 overflow-hidden mb-3 border-2 border-white/20">
+              {viewingProfileCard.profile_pic ? <img src={viewingProfileCard.profile_pic} className="w-full h-full object-cover" /> : viewingProfileCard.username?.[0]?.toUpperCase()}
+            </div>
+            <h3 className="text-lg font-bold text-white mb-0.5">@{viewingProfileCard.username}</h3>
+            <p className="text-[11px] font-mono text-gray-400 mb-6">ID: {viewingProfileCard.id}</p>
+
+            <button 
+              onClick={() => {
+                setIsFollowingSelectedUser(!isFollowingSelectedUser);
+                setFollowingCount(prev => isFollowingSelectedUser ? prev - 1 : prev + 1);
+                setToastMessage(isFollowingSelectedUser ? "Berhasil Unfollow" : "Berhasil Mengikuti!");
+              }}
+              className={`w-full py-3 rounded-full font-bold text-xs transition-colors ${isFollowingSelectedUser ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-black hover:bg-gray-200'}`}
+            >
+              {isFollowingSelectedUser ? 'Unfollow' : 'Follow'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: FOLLOWERS LIST --- */}
+      {isFollowersModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsFollowersModalOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
+            <h3 className="text-lg font-bold">Daftar Followers ({followersCount})</h3>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+              <p className="text-xs text-gray-400 text-center py-4">Belum ada followers.</p>
+            </div>
+            <button onClick={() => setIsFollowersModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: FOLLOWING LIST --- */}
+      {isFollowingModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsFollowingModalOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
+            <h3 className="text-lg font-bold">Daftar Following ({followingCount})</h3>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+              <p className="text-xs text-gray-400 text-center py-4">Anda belum mengikuti siapapun.</p>
+            </div>
+            <button onClick={() => setIsFollowingModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
+          </div>
+        </div>
+      )}
 
       {isFullScreenSearch && (
         <div className="fixed inset-0 z-[110] bg-black text-white flex flex-col p-4 overflow-y-auto animate-fade-in">
@@ -1393,7 +1583,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* UPDATE 4: Modal Buat Playlist (Termasuk Opsi Playlist Bersama / Collaborative) */}
+      {/* CREATE PLAYLIST MODAL (With Username Collaborative Option) */}
       {isCreatePlaylistOpen && (
         <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
@@ -1419,10 +1609,10 @@ export default function Home() {
               </label>
               {isCollaborativePlaylist && (
                 <input 
-                  type="email" 
-                  value={collaboratorEmail}
-                  onChange={(e) => setCollaboratorEmail(e.target.value)}
-                  placeholder="Email teman kontributor..."
+                  type="text" 
+                  value={collaboratorUsername}
+                  onChange={(e) => setCollaboratorUsername(e.target.value)}
+                  placeholder="Username teman (mis: @johndoe)..."
                   className="w-full bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white mt-1"
                 />
               )}
@@ -1459,4 +1649,4 @@ export default function Home() {
       </div>
     </div>
   );
-      }
+}
