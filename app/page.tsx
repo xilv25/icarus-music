@@ -49,10 +49,15 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState('');
+  const [coverPic, setCoverPic] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+  const [followersCount, setFollowersCount] = useState(1280);
+  const [followingCount, setFollowingCount] = useState(342);
   
   // Temporary state for editing profile
   const [tempUsername, setTempUsername] = useState('');
   const [tempProfilePic, setTempProfilePic] = useState('');
+  const [tempCoverPic, setTempCoverPic] = useState('');
 
   // --- APP NAVIGATION & STATES ---
   const [activeTab, setActiveTab] = useState('home'); 
@@ -116,6 +121,19 @@ export default function Home() {
     const savedPic = localStorage.getItem('icarus_profile_pic') || '';
     setProfilePic(savedPic);
     setTempProfilePic(savedPic);
+
+    const savedCover = localStorage.getItem('icarus_cover_pic') || '';
+    setCoverPic(savedCover);
+    setTempCoverPic(savedCover);
+
+    const savedVerified = localStorage.getItem('icarus_is_verified') === 'true';
+    setIsVerified(savedVerified);
+
+    const savedFollowers = parseInt(localStorage.getItem('icarus_followers') || '1280');
+    setFollowersCount(savedFollowers);
+
+    const savedFollowing = parseInt(localStorage.getItem('icarus_following') || '342');
+    setFollowingCount(savedFollowing);
 
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
@@ -188,26 +206,38 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // --- HELPER: RENDER PROFILE AVATAR / INITIALS ---
-  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold") => {
-    if (profilePic.trim()) {
-      return (
-        <img src={profilePic} alt="Profile" className={`${customClass} rounded-full object-cover`} />
-      );
+  // --- HELPER: CONVERT DEVICE FILE TO BASE64 ---
+  const handleDeviceFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setter(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-    
-    let displayInitials = "ME";
-    if (username.trim()) {
-      const parts = username.trim().split(' ');
-      displayInitials = parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : parts[0].substring(0, 2);
-    } else if (userEmail.trim()) {
-      const namePart = userEmail.split('@')[0];
-      displayInitials = namePart.substring(0, 2);
-    }
+  };
 
+  // --- HELPER: RENDER PROFILE AVATAR / INITIALS WITH VERIFIED BADGE ---
+  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold") => {
     return (
-      <div className={`${customClass} rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-white uppercase shadow-md`}>
-        {displayInitials}
+      <div className="relative inline-block flex-shrink-0">
+        {profilePic.trim() ? (
+          <img src={profilePic} alt="Profile" className={`${customClass} rounded-full object-cover ${isVerified ? 'border-2 border-blue-500' : ''}`} />
+        ) : (
+          <div className={`${customClass} rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-white uppercase shadow-md ${isVerified ? 'border-2 border-blue-500' : ''}`}>
+            {username.trim() ? (
+              username.trim().split(' ').length > 1 ? `${username.trim().split(' ')[0][0]}${username.trim().split(' ')[1][0]}` : username.trim().substring(0, 2)
+            ) : userEmail.trim() ? (
+              userEmail.split('@')[0].substring(0, 2)
+            ) : 'ME'}
+          </div>
+        )}
+        {isVerified && (
+          <span className="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-0.5 shadow flex items-center justify-center w-4 h-4 text-[9px] font-bold border border-black">
+            ✓
+          </span>
+        )}
       </div>
     );
   };
@@ -242,10 +272,14 @@ export default function Home() {
     localStorage.removeItem('icarus_email');
     localStorage.removeItem('icarus_username');
     localStorage.removeItem('icarus_profile_pic');
+    localStorage.removeItem('icarus_cover_pic');
+    localStorage.removeItem('icarus_is_verified');
     setIsLoggedIn(false);
     setUserEmail('');
     setUsername('');
     setProfilePic('');
+    setCoverPic('');
+    setIsVerified(false);
     setToastMessage("Berhasil keluar akun.");
   };
 
@@ -253,8 +287,11 @@ export default function Home() {
     e.preventDefault();
     setUsername(tempUsername);
     setProfilePic(tempProfilePic);
+    setCoverPic(tempCoverPic);
+
     localStorage.setItem('icarus_username', tempUsername);
     localStorage.setItem('icarus_profile_pic', tempProfilePic);
+    localStorage.setItem('icarus_cover_pic', tempCoverPic);
     setToastMessage("Profil berhasil diperbarui!");
   };
 
@@ -779,54 +816,103 @@ export default function Home() {
 
         {/* --- TAB: PROFILE --- */}
         {activeTab === 'profile' && (
-          <div className="animate-fade-in pt-6 flex flex-col items-center">
-            <div className="w-24 h-24 mb-4 shadow-xl flex items-center justify-center">
-              {renderAvatar("w-24 h-24 text-2xl font-bold")}
+          <div className="animate-fade-in pb-10">
+            {/* Background Cover (Supports GIF/Images) */}
+            <div className="w-full h-40 bg-gradient-to-r from-gray-900 via-purple-950 to-black relative overflow-hidden rounded-2xl shadow-inner mb-[-40px]">
+              {coverPic && (
+                <img src={coverPic} alt="Cover Background" className="w-full h-full object-cover opacity-80" />
+              )}
             </div>
-            <h2 className="text-2xl font-bold mb-1">{username || 'User Icarus'}</h2>
-            <p className="text-xs text-gray-400 mb-6">{userEmail || 'user@icarus.music'}</p>
 
-            <form onSubmit={handleSaveProfile} className="w-full max-w-sm flex flex-col gap-4 bg-white/5 border border-white/10 p-5 rounded-2xl mb-4">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Edit Profil</h3>
-              
-              <div>
-                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Username</label>
-                <input 
-                  type="text" 
-                  value={tempUsername}
-                  onChange={(e) => setTempUsername(e.target.value)}
-                  placeholder="Masukkan username kamu..."
-                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
-                />
+            <div className="px-4 flex flex-col items-center relative z-10">
+              <div className="mb-3">
+                {renderAvatar("w-24 h-24 text-2xl font-bold")}
               </div>
 
-              <div>
-                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">URL Foto Profil (Opsional)</label>
-                <input 
-                  type="text" 
-                  value={tempProfilePic}
-                  onChange={(e) => setTempProfilePic(e.target.value)}
-                  placeholder="https://contoh.com/foto.jpg"
-                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
-                />
+              <div className="flex items-center gap-1.5 mb-1">
+                <h2 className="text-2xl font-bold text-white">{username || 'User Icarus'}</h2>
+                {isVerified && (
+                  <span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow" title="Verified Account">
+                    ✓
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mb-4">{userEmail || 'user@icarus.music'}</p>
+
+              {/* Stats Row: Songs, Playlists, Followers, Following */}
+              <div className="grid grid-cols-4 gap-2 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-white">{likedSongsList.length}</span>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Songs</span>
+                </div>
+                <div className="flex flex-col border-l border-white/10">
+                  <span className="text-base font-bold text-white">{playlists.length}</span>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Playlists</span>
+                </div>
+                <div className="flex flex-col border-l border-white/10">
+                  <span className="text-base font-bold text-white">{followersCount}</span>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Followers</span>
+                </div>
+                <div className="flex flex-col border-l border-white/10">
+                  <span className="text-base font-bold text-white">{followingCount}</span>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">Following</span>
+                </div>
               </div>
 
-              <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors">
-                Simpan Perubahan
-              </button>
-            </form>
+              {/* Edit Profile Form */}
+              <form onSubmit={handleSaveProfile} className="w-full max-w-md flex flex-col gap-4 bg-white/5 border border-white/10 p-5 rounded-2xl mb-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Edit Profil & Perangkat</h3>
+                
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Username</label>
+                  <input 
+                    type="text" 
+                    value={tempUsername}
+                    onChange={(e) => setTempUsername(e.target.value)}
+                    placeholder="Masukkan username kamu..."
+                    className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
+                  />
+                </div>
 
-            <div className="w-full max-w-sm flex flex-col gap-3">
-              <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
-                <span className="text-sm font-medium">Status Akun</span>
-                <span className="text-xs text-green-400 font-bold bg-green-500/10 px-2.5 py-1 rounded-full">Premium Active</span>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Foto Profil (Pilih dari Device)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => handleDeviceFileUpload(e, setTempProfilePic)}
+                    className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Background Cover / GIF (Pilih dari Device)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*,.gif"
+                    onChange={(e) => handleDeviceFileUpload(e, setTempCoverPic)}
+                    className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
+                  />
+                </div>
+
+                <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors">
+                  Simpan Perubahan
+                </button>
+              </form>
+
+              <div className="w-full max-w-md flex flex-col gap-3">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
+                  <span className="text-sm font-medium">Status Akun</span>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isVerified ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-green-500/10 text-green-400'}`}>
+                    {isVerified ? 'Verified Member ✓' : 'Premium Active'}
+                  </span>
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors"
+                >
+                  Keluar Akun (Logout)
+                </button>
               </div>
-              <button 
-                onClick={handleLogout}
-                className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors"
-              >
-                Keluar Akun (Logout)
-              </button>
             </div>
           </div>
         )}
@@ -1084,4 +1170,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
+      }
