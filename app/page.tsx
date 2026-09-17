@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@supabase/supabase-js';
 
-// Inisialisasi Supabase Client (Tanpa export agar tidak error di Next.js Page)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -44,18 +43,38 @@ export default function Home() {
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   
+  // Queue & Player Control States (Shuffle & Repeat)
+  const [currentQueue, setCurrentQueue] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [isRepeat, setIsRepeat] = useState<'off' | 'all' | 'one'>('off');
+
+  // Menu Titik Tiga Modal State (Poin 5)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   const [playedProgress, setPlayedProgress] = useState(0); 
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
+  const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
+  const activeLyricRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
     loadHomepageData(savedHistory);
   }, []);
+
+  // Toast notification timer
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
 
   useEffect(() => {
     if (currentTrack) {
@@ -83,6 +102,15 @@ export default function Home() {
     }
   }, [currentTrack?.videoId]);
 
+  const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
+  const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
+
+  useEffect(() => {
+    if (activeLyricRef.current) {
+      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [activeLineIndex]);
+
   const loadHomepageData = async (userHistory: any[]) => {
     setIsLoading(true);
     let query = "Trending Pop Music"; 
@@ -100,8 +128,12 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  const playSong = (song: any) => {
+  const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
+    if (queue.length > 0) {
+      setCurrentQueue(queue);
+      setCurrentIndex(index);
+    }
     setIsPlaying(true);
     setIsBuffering(true);
     setPlayedProgress(0);
@@ -110,6 +142,30 @@ export default function Home() {
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 10);
     setHistory(newHistory);
     localStorage.setItem('icarus_history', JSON.stringify(newHistory));
+  };
+
+  // [POIN 4] Tombol Next dengan Shuffle & Repeat Logic
+  const handleNext = () => {
+    if (isRepeat === 'one' && currentTrack) {
+      if (playerRef.current) playerRef.current.seekTo(0, 'seconds');
+      return;
+    }
+    if (currentQueue.length > 0) {
+      let nextIdx;
+      if (isShuffle) {
+        nextIdx = Math.floor(Math.random() * currentQueue.length);
+      } else {
+        nextIdx = (currentIndex + 1) % currentQueue.length;
+      }
+      playSong(currentQueue[nextIdx], currentQueue, nextIdx);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentQueue.length > 0) {
+      const prevIdx = (currentIndex - 1 + currentQueue.length) % currentQueue.length;
+      playSong(currentQueue[prevIdx], currentQueue, prevIdx);
+    }
   };
 
   const togglePlay = (e?: React.MouseEvent) => {
@@ -124,8 +180,25 @@ export default function Home() {
     
     setPlayedProgress(clampedPosition);
     if (playerRef.current && duration > 0) {
-      playerRef.current.seekTo(clampedPosition, 'fraction');
+      const targetSeconds = clampedPosition * duration;
+      playerRef.current.seekTo(targetSeconds, 'seconds');
     }
+  };
+
+  // [POIN 5] Fungsi Share & Copy Link
+  const handleShare = () => {
+    const songUrl = `https://www.youtube.com/watch?v=${currentTrack?.videoId}`;
+    if (navigator.share) {
+      navigator.share({
+        title: currentTrack?.title,
+        text: `Dengarkan ${currentTrack?.title} oleh ${currentTrack?.artists?.map((a:any)=>a.name).join(', ')} di Icarus Music`,
+        url: songUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(songUrl);
+      setToastMessage("Tautan lagu disalin ke clipboard!");
+    }
+    setIsMenuOpen(false);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -145,6 +218,13 @@ export default function Home() {
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs animate-bounce">
+          {toastMessage}
+        </div>
+      )}
+
       {currentTrack && (
         <div className="hidden">
           <ReactPlayer
@@ -161,6 +241,7 @@ export default function Home() {
               setPlayedSeconds(playedSeconds);
             }}
             onDuration={(dur) => setDuration(dur)}
+            onEnded={handleNext}
             volume={1}
             width="0"
             height="0"
@@ -196,7 +277,7 @@ export default function Home() {
               ) : (
                 <div className="flex flex-col gap-1">
                   {suggestions.map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                    <div key={idx} onClick={() => playSong(song, suggestions, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden relative">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -229,7 +310,7 @@ export default function Home() {
                 <h2 className="text-xl font-bold tracking-tight mb-4">Your recent rotation</h2>
                 <div className="flex flex-col gap-1">
                   {history.map((song, idx) => (
-                    <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                    <div key={idx} onClick={() => playSong(song, history, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -276,7 +357,7 @@ export default function Home() {
                   <div className="text-center text-gray-400 mt-10">Searching...</div>
                ) : searchResults.length > 0 ? (
                  searchResults.map((song, idx) => (
-                   <div key={idx} onClick={() => playSong(song)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
+                   <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between py-2 rounded-md hover:bg-[#1a1a1a] cursor-pointer group transition-colors">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-14 h-14 bg-gray-800 flex-shrink-0 overflow-hidden">
                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -330,12 +411,13 @@ export default function Home() {
             </div>
           </div>
           
-          <div onClick={(e) => { e.stopPropagation(); }} className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
+          <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
             <div className="h-full bg-white transition-all duration-300 ease-linear" style={{ width: `${playedProgress * 100}%` }}></div>
           </div>
         </div>
       )}
 
+      {/* FULL SCREEN PLAYER DENGAN SHUFFLE, REPEAT & MENU TITIK TIGA (POIN 4 & 5) */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -343,7 +425,7 @@ export default function Home() {
       >
         {currentTrack && (
           <>
-            <div className="flex items-center justify-between px-6 py-6 sticky top-0 bg-[#2a2a2a]/80 backdrop-blur-md z-10">
+            <div className="flex items-center justify-between px-6 py-6 sticky top-0 bg-[#2a2a2a]/90 backdrop-blur-md z-10">
               <button onClick={() => setIsPlayerOpen(false)} className="p-2 -ml-2">
                 <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
               </button>
@@ -351,8 +433,9 @@ export default function Home() {
                  <span className="text-[10px] uppercase tracking-widest text-gray-300">Playing from Icarus</span>
                  <span className="text-xs font-bold">{activeTab === 'home' ? 'Start listening' : 'Search'}</span>
               </div>
-              <button className="p-2 -mr-2">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+              {/* TOMBOL TITIK TIGA (POIN 5) */}
+              <button onClick={() => setIsMenuOpen(true)} className="p-2 -mr-2 text-white hover:text-gray-300">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
               </button>
             </div>
 
@@ -396,13 +479,21 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* CONTROLS DENGAN TOMBOL SHUFFLE & REPEAT AKTIF (POIN 4) */}
               <div className="w-full flex items-center justify-between mb-10 px-2">
-                <button className="text-gray-400 hover:text-white">
+                {/* SHUFFLE BUTTON */}
+                <button 
+                  onClick={() => setIsShuffle(!isShuffle)} 
+                  className={`transition-colors ${isShuffle ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                  title="Shuffle"
+                >
                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                 </button>
-                <button className="text-white">
+                
+                <button onClick={handlePrev} className="text-white hover:text-gray-300 transition-colors">
                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                 </button>
+
                 <button onClick={togglePlay} className="w-16 h-16 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
                   {isBuffering ? (
                     <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
@@ -412,38 +503,70 @@ export default function Home() {
                     <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                   )}
                 </button>
-                <button className="text-white">
+
+                <button onClick={handleNext} className="text-white hover:text-gray-300 transition-colors">
                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
                 </button>
-                <button className="text-gray-400 hover:text-white">
+
+                {/* REPEAT BUTTON */}
+                <button 
+                  onClick={() => setIsRepeat(isRepeat === 'off' ? 'all' : isRepeat === 'all' ? 'one' : 'off')} 
+                  className={`relative transition-colors ${isRepeat !== 'off' ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                  title={`Repeat: ${isRepeat}`}
+                >
                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                   {isRepeat === 'one' && (
+                     <span className="absolute -top-1 -right-1 text-[9px] bg-white text-black font-extrabold rounded-full w-3.5 h-3.5 flex items-center justify-center">1</span>
+                   )}
                 </button>
               </div>
             </div>
 
+            {/* LYRICS SECTION */}
             <div className="px-6 mt-4 pb-12">
-              <div className="bg-[#1e1e1e] rounded-xl p-6 shadow-lg min-h-[350px]">
-                <div className="flex justify-between items-center mb-6">
+              <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] overflow-y-auto max-h-none flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
+                
+                <div className="flex justify-between items-center mb-6 sticky top-0 bg-inherit pt-1 pb-3 border-b border-white/10 z-10">
                   <h3 className="text-sm font-bold tracking-wide">Lyrics</h3>
-                  <button className="bg-black/50 p-1.5 rounded-full">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                  <button 
+                    onClick={() => setIsLyricsExpanded(!isLyricsExpanded)}
+                    className="bg-black/60 p-2 rounded-full hover:bg-black transition-colors"
+                  >
+                    {isLyricsExpanded ? (
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                    )}
                   </button>
                 </div>
                 
-                <div className="flex flex-col gap-4 text-xl font-bold text-gray-300">
+                <div className={`flex flex-col gap-4 text-xl font-bold overflow-y-auto ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
                   {isLoadingLyrics ? (
-                    <div className="flex flex-col gap-3 animate-pulse">
-                      <div className="h-4 bg-gray-600 rounded w-3/4"></div>
-                      <div className="h-4 bg-gray-600 rounded w-1/2"></div>
-                      <div className="h-4 bg-gray-600 rounded w-5/6"></div>
-                      <div className="h-4 bg-gray-600 rounded w-2/3 mt-4"></div>
+                    <div className="flex flex-col gap-4 animate-pulse pt-10">
+                      <div className="h-5 bg-gray-800 rounded w-3/4"></div>
+                      <div className="h-5 bg-gray-800 rounded w-1/2"></div>
+                      <div className="h-5 bg-gray-800 rounded w-5/6"></div>
+                      <div className="h-5 bg-gray-800 rounded w-2/3 mt-4"></div>
                     </div>
-                  ) : lyrics ? (
-                    <div className="whitespace-pre-wrap leading-relaxed text-white">
-                      {lyrics}
-                    </div>
+                  ) : lyricLines.length > 0 ? (
+                    lyricLines.map((line, idx) => {
+                      const isActive = idx === activeLineIndex;
+                      return (
+                        <div 
+                          key={idx}
+                          ref={isActive ? activeLyricRef : null}
+                          className={`transition-all duration-300 leading-relaxed ${
+                            isActive 
+                              ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
+                              : 'text-gray-500 text-lg md:text-xl font-medium opacity-60'
+                          }`}
+                        >
+                          {line}
+                        </div>
+                      );
+                    })
                   ) : (
-                    <p className="text-gray-500 font-normal italic">
+                    <p className="text-gray-500 font-normal italic text-base pt-10 text-center">
                       Lirik lagu tidak ditemukan di database publik.
                     </p>
                   )}
@@ -454,6 +577,40 @@ export default function Home() {
         )}
       </div>
 
+      {/* POP-UP MENU TITIK TIGA (POIN 5) */}
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
+          <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2"></div>
+            
+            <div className="flex items-center gap-3 pb-4 border-b border-white/10">
+              <div className="w-12 h-12 bg-black rounded overflow-hidden flex-shrink-0">
+                {currentTrack?.thumbnails?.[0]?.url && <img src={currentTrack.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <span className="font-bold text-white text-base truncate">{currentTrack?.title}</span>
+                <span className="text-xs text-gray-400 truncate">{currentTrack?.artists?.map((a:any)=>a.name).join(', ')}</span>
+              </div>
+            </div>
+
+            <button onClick={handleShare} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+              <span>Bagikan (Share)</span>
+            </button>
+
+            <button onClick={() => { setToastMessage("Ditambahkan ke antrean!"); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>Tambahkan ke Antrean</span>
+            </button>
+
+            <button onClick={() => setIsMenuOpen(false)} className="mt-2 w-full py-3 bg-[#333333] hover:bg-[#444444] rounded-full font-semibold text-center text-white transition-colors">
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
         <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -477,4 +634,4 @@ export default function Home() {
       </div>
     </div>
   );
-                                                                                                    }
+}
