@@ -1524,12 +1524,18 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
 
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Foto Profil (Device)</label>
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => handleDeviceFileUpload(e, setTempProfilePic)}
-                        className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-gray-200 cursor-pointer"
-                      />
+                      <input
+  type="file"
+  accept="image/jpeg,image/png,image/webp,image/gif"
+  onChange={(e) =>
+    handleDeviceFileUpload(
+      e,
+      setTempProfilePic,
+      setProfilePicFile
+    )
+  }
+  className="w-full text-xs text-gray-400 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:text-xs file:font-semibold file:text-black"
+/>
                     </div>
 
                     <div>
