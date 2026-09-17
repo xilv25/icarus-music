@@ -1,19 +1,20 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
+
+// Import ReactPlayer secara dinamis agar Next.js tidak error
+const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
 export default function Home() {
   const [query, setQuery] = useState('');
   const [songs, setSongs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // State untuk Audio Player
+  // State untuk Audio Player (Sekarang jauh lebih simpel)
   const [currentTrack, setCurrentTrack] = useState<any>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isFetchingAudio, setIsFetchingAudio] = useState(false);
-  
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,41 +32,16 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Fungsi untuk memutar lagu saat kartu diklik
-  const playSong = async (song: any) => {
+  // Fungsi saat lagu di-klik
+  const playSong = (song: any) => {
     setCurrentTrack(song);
-    setIsPlaying(false);
-    setAudioUrl(null);
-    setIsFetchingAudio(true);
-
-    try {
-      const res = await fetch(`/api/stream?id=${song.videoId}`);
-      const json = await res.json();
-      if (json.status === 'success') {
-        setAudioUrl(json.url);
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      console.error("Gagal mengambil stream audio", error);
-    }
-    setIsFetchingAudio(false);
+    setIsPlaying(true);
+    setIsBuffering(true); // Mulai animasi loading
   };
 
-  // Efek untuk memutar audio otomatis setelah URL didapat
-  useEffect(() => {
-    if (audioUrl && audioRef.current) {
-      audioRef.current.play();
-    }
-  }, [audioUrl]);
-
-  // Fungsi Play/Pause dari tombol bawah
+  // Fungsi Play/Pause tombol bawah
   const togglePlay = () => {
-    if (audioRef.current && audioUrl) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
+    if (currentTrack) {
       setIsPlaying(!isPlaying);
     }
   };
@@ -73,7 +49,26 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
       
-      {/* SIDEBAR (Desktop) - Tetap sama */}
+      {/* HIDDEN YOUTUBE PLAYER (Trik Rahasianya ada di sini) */}
+      {currentTrack && (
+        <div className="hidden">
+          <ReactPlayer
+            url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
+            playing={isPlaying}
+            onReady={() => setIsBuffering(false)}
+            onBuffer={() => setIsBuffering(true)}
+            onBufferEnd={() => setIsBuffering(false)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+            volume={1}
+            width="0"
+            height="0"
+          />
+        </div>
+      )}
+
+      {/* SIDEBAR */}
       <div className="w-64 bg-black p-6 hidden md:flex flex-col gap-6">
         <div className="text-2xl font-bold tracking-tighter flex items-center gap-2">
           <div className="w-8 h-8 bg-white text-black rounded-full flex items-center justify-center font-bold">I</div>
@@ -145,16 +140,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* AUDIO ELEMENT (Hidden) */}
-      {audioUrl && (
-        <audio 
-          ref={audioRef} 
-          src={audioUrl} 
-          onEnded={() => setIsPlaying(false)}
-          autoPlay 
-        />
-      )}
-
       {/* BOTTOM PLAYER BAR */}
       <div className="absolute bottom-0 w-full h-24 bg-black border-t border-[#282828] px-4 flex items-center justify-between z-50">
         
@@ -196,11 +181,14 @@ export default function Home() {
               onClick={togglePlay}
               className="w-9 h-9 bg-white rounded-full flex items-center justify-center hover:scale-105 transition cursor-pointer"
             >
-              {isFetchingAudio ? (
+              {isBuffering ? (
+                 // Animasi Loading
                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
               ) : isPlaying ? (
+                 // Icon Pause
                  <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
               ) : (
+                 // Icon Play
                  <svg className="w-4 h-4 text-black ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
               )}
             </div>
@@ -209,7 +197,6 @@ export default function Home() {
             <svg className="w-5 h-5 text-gray-400 hover:text-white cursor-pointer" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
           </div>
           
-          {/* Progress Bar (Visual Only for now) */}
           <div className="w-full flex items-center gap-2 group">
             <span className="text-[11px] text-gray-400">0:00</span>
             <div className="h-1 bg-[#4d4d4d] rounded-full flex-1 relative cursor-pointer">
@@ -229,5 +216,4 @@ export default function Home() {
       </div>
     </div>
   );
-              }
-              
+}
