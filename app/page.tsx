@@ -19,8 +19,12 @@ const formatTime = (seconds: number) => {
 
 const getHighResCover = (url?: string) => {
   if (!url) return '';
-  if (url.includes('=w')) return url.replace(/=w\d+-h\d+/, '=w1080-h1080');
-  if (url.includes('ytimg.com')) return url.replace('hqdefault.jpg', 'maxresdefault.jpg').replace('default.jpg', 'maxresdefault.jpg');
+  if (url.includes('=w')) {
+    return url.replace(/=w\d+-h\d+/, '=w1080-h1080');
+  }
+  if (url.includes('ytimg.com')) {
+    return url.replace('hqdefault.jpg', 'maxresdefault.jpg').replace('default.jpg', 'maxresdefault.jpg');
+  }
   return url;
 };
 
@@ -34,7 +38,6 @@ const chunkArray = (arr: any[], size: number) => {
 
 export default function Home() {
   // --- AUTH STATES ---
-  const [session, setSession] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authInput, setAuthInput] = useState('');
@@ -42,51 +45,35 @@ export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // --- FILTER & NAVIGATION ---
-  const [activeTab, setActiveTab] = useState('home'); 
-  const [homeFilter, setHomeFilter] = useState<'all' | 'music' | 'podcasts'>('all');
-  const [isFullScreenTrendingOpen, setIsFullScreenTrendingOpen] = useState(false);
+  // --- USER PROFILE STATES ---
+  const [userEmail, setUserEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [profilePic, setProfilePic] = useState('');
+  
+  // Temporary state for editing profile
+  const [tempUsername, setTempUsername] = useState('');
+  const [tempProfilePic, setTempProfilePic] = useState('');
 
-  // --- SEARCH & SOCIAL STATES ---
+  // --- APP NAVIGATION & STATES ---
+  const [activeTab, setActiveTab] = useState('home'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [visibleHistoryCount, setVisibleHistoryCount] = useState(5);
-  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
-  const [userSearchQuery, setUserSearchQuery] = useState('');
-
-  // --- MUSIC CONTENT STATES ---
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [randomSongs, setRandomSongs] = useState<any[]>([]);
-  const [visibleRandomCount, setVisibleRandomCount] = useState(5);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  // --- USER PROFILE & SOCIAL STATS ---
-  const [profile, setProfile] = useState<any>(null);
-  const [viewedProfile, setViewedProfile] = useState<any>(null);
-  const [totalFollowers, setTotalFollowers] = useState(0);
-  const [totalFollowing, setTotalFollowing] = useState(0);
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [editFullName, setEditFullName] = useState('');
-  const [editUsername, setEditUsername] = useState('');
-  const [editAvatarUrl, setEditAvatarUrl] = useState('');
-  const [editBannerUrl, setEditBannerUrl] = useState('');
 
   // --- LIBRARY & PLAYLIST STATES ---
   const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
   const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
-  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [playlists, setPlaylists] = useState<{ id: string; name: string; songs: any[] }[]>([]);
   const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
-  const [playlistContributors, setPlaylistContributors] = useState<any[]>([]);
 
   // Modal States
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [newPlaylistType, setNewPlaylistType] = useState(false);
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
   const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
-  const [inlinePlaylistName, setInlinePlaylistName] = useState('');
 
   // --- PLAYER STATES ---
   const playerRef = useRef<any>(null);
@@ -110,29 +97,38 @@ export default function Home() {
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
-
+  
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
+  // Load Initial LocalStorage Data
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        setIsLoggedIn(true);
-        fetchUserData(session.user.id);
-      }
-    });
+    const userAuth = localStorage.getItem('icarus_logged_in');
+    if (userAuth === 'true') setIsLoggedIn(true);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        setIsLoggedIn(true);
-        fetchUserData(session.user.id);
-      }
-    });
+    const savedEmail = localStorage.getItem('icarus_email') || '';
+    setUserEmail(savedEmail);
+
+    const savedUsername = localStorage.getItem('icarus_username') || '';
+    setUsername(savedUsername);
+    setTempUsername(savedUsername);
+
+    const savedPic = localStorage.getItem('icarus_profile_pic') || '';
+    setProfilePic(savedPic);
+    setTempProfilePic(savedPic);
+
+    const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
+    setHistory(savedHistory);
+
+    const savedLikes = JSON.parse(localStorage.getItem('icarus_liked_ids') || '[]');
+    setLikedSongIds(savedLikes);
+    const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
+    setLikedSongsList(savedLikedFull);
+
+    const savedPlaylists = JSON.parse(localStorage.getItem('icarus_playlists') || '[]');
+    setPlaylists(savedPlaylists);
 
     loadHomepageData();
-    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -142,36 +138,7 @@ export default function Home() {
     }
   }, [toastMessage]);
 
-  const fetchUserData = async (userId: string) => {
-    const { data: profData } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (profData) {
-      setProfile(profData);
-      setViewedProfile(profData);
-      setEditFullName(profData.full_name || '');
-      setEditUsername(profData.username || '');
-      setEditAvatarUrl(profData.avatar_url || '');
-      setEditBannerUrl(profData.banner_url || '');
-    }
-
-    const { data: likedData } = await supabase.from('liked_songs').select('song_data').eq('user_id', userId);
-    if (likedData) {
-      const songs = likedData.map((item: any) => item.song_data);
-      setLikedSongsList(songs);
-      setLikedSongIds(songs.map((s: any) => s.videoId));
-    }
-
-    const { data: plData } = await supabase.from('playlists').select('*').eq('user_id', userId);
-    if (plData) setPlaylists(plData);
-
-    const { data: followers } = await supabase.from('friendships').select('*').eq('receiver_id', userId).eq('status', 'accepted');
-    const { data: following } = await supabase.from('friendships').select('*').eq('sender_id', userId).eq('status', 'accepted');
-    setTotalFollowers(followers?.length || 0);
-    setTotalFollowing(following?.length || 0);
-
-    const { data: historyData } = await supabase.from('search_history').select('query').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
-    if (historyData) setSearchHistory(historyData.map(h => h.query));
-  };
-
+  // Lirik Fetcher
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
@@ -185,7 +152,7 @@ export default function Home() {
           const data = await res.json();
           setLyrics(data.lyrics);
         } catch {
-          setLyrics("Lirik tidak tersedia untuk lagu ini.");
+          setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
         } finally {
           setIsLoadingLyrics(false);
         }
@@ -212,7 +179,7 @@ export default function Home() {
       const json1 = await res1.json();
       if (json1.status === 'success') setSuggestions(json1.data.slice(0, 15));
 
-      const res2 = await fetch(`/api/search?q=Trending Chill Vibes`);
+      const res2 = await fetch(`/api/search?q=Trending Chill Mix`);
       const json2 = await res2.json();
       if (json2.status === 'success') setRandomSongs(json2.data.slice(0, 15));
     } catch (e) {
@@ -221,58 +188,78 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  const handleAuthSubmit = async (e: React.FormEvent) => {
+  // --- HELPER: RENDER PROFILE AVATAR / INITIALS ---
+  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold") => {
+    if (profilePic.trim()) {
+      return (
+        <img src={profilePic} alt="Profile" className={`${customClass} rounded-full object-cover`} />
+      );
+    }
+    
+    let displayInitials = "ME";
+    if (username.trim()) {
+      const parts = username.trim().split(' ');
+      displayInitials = parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : parts[0].substring(0, 2);
+    } else if (userEmail.trim()) {
+      const namePart = userEmail.split('@')[0];
+      displayInitials = namePart.substring(0, 2);
+    }
+
+    return (
+      <div className={`${customClass} rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-white uppercase shadow-md`}>
+        {displayInitials}
+      </div>
+    );
+  };
+
+  // --- AUTH HANDLER ---
+  const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
 
     if (!authInput || !authPassword) {
-      setAuthError("Semua kolom harus diisi");
+      setAuthError("Semua kolom harus diisi!");
       return;
     }
 
     if (authMode === 'register') {
       const strongRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
       if (!strongRegex.test(authPassword)) {
-        setAuthError("Password minimal 8 karakter dan mengandung huruf serta angka");
+        setAuthError("Password harus minimal 8 karakter dan mengandung kombinasi huruf & angka.");
         return;
       }
-      const { error } = await supabase.auth.signUp({ email: authInput, password: authPassword });
-      if (error) setAuthError(error.message);
-      else setToastMessage("Akun berhasil dibuat. Silakan masuk.");
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: authInput, password: authPassword });
-      if (error) setAuthError("Gagal masuk. Periksa kembali email dan kata sandi Anda.");
-      else setToastMessage("Berhasil masuk");
     }
+
+    localStorage.setItem('icarus_logged_in', 'true');
+    localStorage.setItem('icarus_email', authInput);
+    setUserEmail(authInput);
+    setIsLoggedIn(true);
+    setToastMessage(authMode === 'login' ? "Berhasil masuk!" : "Akun berhasil dibuat & terdaftar!");
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    localStorage.removeItem('icarus_logged_in');
+    localStorage.removeItem('icarus_email');
+    localStorage.removeItem('icarus_username');
+    localStorage.removeItem('icarus_profile_pic');
     setIsLoggedIn(false);
-    setSession(null);
-    setProfile(null);
-    setToastMessage("Berhasil keluar akun");
+    setUserEmail('');
+    setUsername('');
+    setProfilePic('');
+    setToastMessage("Berhasil keluar akun.");
   };
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
+  const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) return;
-    const { error } = await supabase.from('profiles').update({
-      full_name: editFullName,
-      username: editUsername,
-      avatar_url: editAvatarUrl,
-      banner_url: editBannerUrl
-    }).eq('id', session.user.id);
-
-    if (!error) {
-      setProfile({ ...profile, full_name: editFullName, username: editUsername, avatar_url: editAvatarUrl, banner_url: editBannerUrl });
-      setViewedProfile({ ...viewedProfile, full_name: editFullName, username: editUsername, avatar_url: editAvatarUrl, banner_url: editBannerUrl });
-      setIsEditProfileOpen(false);
-      setToastMessage("Profil berhasil diperbarui");
-    }
+    setUsername(tempUsername);
+    setProfilePic(tempProfilePic);
+    localStorage.setItem('icarus_username', tempUsername);
+    localStorage.setItem('icarus_profile_pic', tempProfilePic);
+    setToastMessage("Profil berhasil diperbarui!");
   };
 
-  const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
+  // --- LIKED SONGS HANDLER ---
+  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const id = song.videoId;
     let updatedIds = [...likedSongIds];
@@ -281,130 +268,59 @@ export default function Home() {
     if (updatedIds.includes(id)) {
       updatedIds = updatedIds.filter(i => i !== id);
       updatedList = updatedList.filter(s => s.videoId !== id);
-      if (session) {
-        await supabase.from('liked_songs').delete().eq('user_id', session.user.id).eq('song_data->>videoId', id);
-      }
-      setToastMessage("Dihapus dari daftar disukai");
+      setToastMessage("Dihapus dari Liked Songs");
     } else {
       updatedIds.push(id);
       updatedList.unshift(song);
-      if (session) {
-        await supabase.from('liked_songs').insert([{ user_id: session.user.id, song_data: song }]);
-      }
-      setToastMessage("Ditambahkan ke daftar disukai");
+      setToastMessage("Ditambahkan ke Liked Songs");
     }
 
     setLikedSongIds(updatedIds);
     setLikedSongsList(updatedList);
+    localStorage.setItem('icarus_liked_ids', JSON.stringify(updatedIds));
+    localStorage.setItem('icarus_liked_full', JSON.stringify(updatedList));
   };
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
-  const handleCreatePlaylist = async (e: React.FormEvent) => {
+  // --- PLAYLIST HANDLER ---
+  const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPlaylistName.trim() || !session) return;
+    if (!newPlaylistName.trim()) return;
 
-    const { data, error } = await supabase.from('playlists').insert([{
-      title: newPlaylistName.trim(),
-      user_id: session.user.id,
-      is_collaborative: newPlaylistType
-    }]).select().single();
+    const newPlaylist = {
+      id: Date.now().toString(),
+      name: newPlaylistName.trim(),
+      songs: []
+    };
 
-    if (!error && data) {
-      setPlaylists([...playlists, data]);
-      setNewPlaylistName('');
-      setNewPlaylistType(false);
-      setIsCreatePlaylistOpen(false);
-      setToastMessage("Playlist berhasil dibuat");
-    } else {
-      setToastMessage("Gagal membuat playlist");
-    }
+    const updated = [...playlists, newPlaylist];
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    setNewPlaylistName('');
+    setIsCreatePlaylistOpen(false);
+    setToastMessage("Playlist berhasil dibuat!");
   };
 
-  const openPlaylistDetail = async (pl: any) => {
-    setActivePlaylistView(pl);
-    if (session && pl.id) {
-      const { data: tracksData } = await supabase
-        .from('playlist_tracks')
-        .select('*, profiles:added_by(username, avatar_url)')
-        .eq('playlist_id', pl.id);
-
-      if (tracksData) {
-        const songs = tracksData.map((t: any) => ({ ...t.song_data, addedByUsername: t.profiles?.username || 'Pengguna' }));
-        const counts: { [key: string]: number } = {};
-        tracksData.forEach((t: any) => {
-          const uname = t.profiles?.username || 'Pengguna';
-          counts[uname] = (counts[uname] || 0) + 1;
-        });
-        const total = tracksData.length;
-        const contribs = Object.keys(counts).map(uname => ({
-          name: uname,
-          count: counts[uname],
-          percentage: total > 0 ? Math.round((counts[uname] / total) * 100) : 0
-        }));
-        setPlaylistContributors(contribs);
-        setActivePlaylistView({ ...pl, songs });
+  const addSongToPlaylist = (playlistId: string) => {
+    if (!songToAddToPlaylist) return;
+    const updated = playlists.map(pl => {
+      if (pl.id === playlistId) {
+        if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+          return { ...pl, songs: [...pl.songs, songToAddToPlaylist] };
+        }
       }
-    }
+      return pl;
+    });
+
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    setIsAddToPlaylistOpen(false);
+    setSongToAddToPlaylist(null);
+    setToastMessage("Lagu ditambahkan ke playlist!");
   };
 
-  const addSongToPlaylist = async (playlistId: string) => {
-    if (!songToAddToPlaylist || !session) return;
-    const { error } = await supabase.from('playlist_tracks').insert([{
-      playlist_id: playlistId,
-      song_data: songToAddToPlaylist,
-      added_by: session.user.id
-    }]);
-
-    if (!error) {
-      setIsAddToPlaylistOpen(false);
-      setSongToAddToPlaylist(null);
-      setToastMessage("Lagu ditambahkan ke playlist");
-    } else {
-      setToastMessage("Gagal menambahkan lagu ke playlist");
-    }
-  };
-
-  const handleCreateInlinePlaylistAndAdd = async () => {
-    if (!inlinePlaylistName.trim() || !songToAddToPlaylist || !session) return;
-
-    const { data: plData, error: plErr } = await supabase.from('playlists').insert([{
-      title: inlinePlaylistName.trim(),
-      user_id: session.user.id,
-      is_collaborative: true
-    }]).select().single();
-
-    if (!plErr && plData) {
-      await supabase.from('playlist_tracks').insert([{
-        playlist_id: plData.id,
-        song_data: songToAddToPlaylist,
-        added_by: session.user.id
-      }]);
-
-      setPlaylists([...playlists, plData]);
-      setInlinePlaylistName('');
-      setIsAddToPlaylistOpen(false);
-      setSongToAddToPlaylist(null);
-      setToastMessage("Playlist baru dibuat dan lagu ditambahkan");
-    }
-  };
-
-  const searchOtherUsers = async (query: string) => {
-    setUserSearchQuery(query);
-    if (!query.trim()) {
-      setUserSearchResults([]);
-      return;
-    }
-    const { data } = await supabase.from('profiles').select('*').ilike('username', `%${query}%`);
-    setUserSearchResults(data || []);
-  };
-
-  const sendFriendRequest = async (targetId: string) => {
-    if (!session) return;
-    const { error } = await supabase.from('friendships').insert([{ sender_id: session.user.id, receiver_id: targetId, status: 'pending' }]);
-    if (!error) setToastMessage("Permintaan pertemanan terkirim");
-  };
-
+  // --- PLAYER CONTROLS ---
   const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
     const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
@@ -420,6 +336,7 @@ export default function Home() {
 
     const newHistory = [song, ...history.filter(s => s.videoId !== song.videoId)].slice(0, 20);
     setHistory(newHistory);
+    localStorage.setItem('icarus_history', JSON.stringify(newHistory));
   };
 
   const handleNext = () => {
@@ -459,14 +376,8 @@ export default function Home() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
+    if (!searchQuery) return;
     setIsLoading(true);
-
-    if (session) {
-      await supabase.from('search_history').insert([{ user_id: session.user.id, query: searchQuery.trim() }]);
-      setSearchHistory([searchQuery.trim(), ...searchHistory.filter(h => h !== searchQuery.trim())]);
-    }
-
     try {
       const res = await fetch(`/api/search?q=${searchQuery}`);
       const json = await res.json();
@@ -475,24 +386,17 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  const openFullScreenTrending = () => {
-    setIsFullScreenTrendingOpen(true);
-    setSearchQuery('');
-    fetch(`/api/search?q=Global Trending Hits 2026`).then(r => r.json()).then(json => {
-      if (json.status === 'success') setSearchResults(json.data);
-    });
-  };
-
   const suggestionColumns = chunkArray(suggestions, 5);
   const historyColumns = chunkArray(history, 5);
 
+  // --- LOGIN / REGISTER SCREEN RENDERING IF NOT LOGGED IN ---
   if (!isLoggedIn) {
     return (
       <div className="bg-black min-h-screen text-white flex flex-col justify-center items-center p-6 font-sans">
         <div className="w-full max-w-sm bg-[#121212] border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-extrabold tracking-tight mb-2">ICARUS</h1>
-            <p className="text-xs text-gray-400">Your Ultimate Vibe and Music Space</p>
+            <p className="text-xs text-gray-400">Your Ultimate Vibe & Music Space</p>
           </div>
 
           <div className="flex bg-black/50 p-1 rounded-xl mb-6 border border-white/5">
@@ -523,7 +427,7 @@ export default function Home() {
                 type="text" 
                 value={authInput}
                 onChange={(e) => setAuthInput(e.target.value)}
-                placeholder="nama@email.com"
+                placeholder="nama@email.com / 0812345..."
                 className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white transition-colors"
               />
             </div>
@@ -535,15 +439,19 @@ export default function Home() {
                   type={showPassword ? "text" : "password"} 
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="Minimal 8 karakter (huruf dan angka)"
-                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 pr-20 text-sm text-white focus:outline-none focus:border-white transition-colors"
+                  placeholder="Minimal 8 karakter (huruf & angka)"
+                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 pr-11 text-sm text-white focus:outline-none focus:border-white transition-colors"
                 />
                 <button 
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white font-semibold"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
                 >
-                  {showPassword ? "Sembunyikan" : "Tampilkan"}
+                  {showPassword ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -560,10 +468,10 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
+            <button onClick={() => { setIsLoggedIn(true); setUserEmail('user@google.com'); localStorage.setItem('icarus_email', 'user@google.com'); setToastMessage("Berhasil masuk via Google!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
                Google
             </button>
-            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'facebook' })} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
+            <button onClick={() => { setIsLoggedIn(true); setUserEmail('user@facebook.com'); localStorage.setItem('icarus_email', 'user@facebook.com'); setToastMessage("Berhasil masuk via Facebook!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
                Facebook
             </button>
           </div>
@@ -572,11 +480,12 @@ export default function Home() {
     );
   }
 
+  // --- MAIN APP RENDER ---
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs animate-bounce">
           {toastMessage}
         </div>
       )}
@@ -607,103 +516,96 @@ export default function Home() {
         </div>
       )}
 
-      {activeTab === 'home' && !isFullScreenTrendingOpen && (
+      {activeTab === 'home' && (
         <div className="sticky top-0 bg-black/90 backdrop-blur-md z-40 px-4 py-4 flex gap-3 items-center">
-          <div onClick={() => { setViewedProfile(profile); setActiveTab('profile'); }} className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-xs font-bold shadow-md cursor-pointer overflow-hidden border border-white/20">
-            {profile?.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : 'ME'}
+          <div onClick={() => setActiveTab('profile')} className="cursor-pointer">
+            {renderAvatar("w-8 h-8 text-xs font-bold")}
           </div>
-          <button onClick={() => setHomeFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${homeFilter === 'all' ? 'bg-white text-black' : 'bg-[#242424] text-white hover:bg-[#303030]'}`}>All</button>
-          <button onClick={() => setHomeFilter('music')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${homeFilter === 'music' ? 'bg-white text-black' : 'bg-[#242424] text-white hover:bg-[#303030]'}`}>Music</button>
-          <button onClick={() => setHomeFilter('podcasts')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${homeFilter === 'podcasts' ? 'bg-white text-black' : 'bg-[#242424] text-white hover:bg-[#303030]'}`}>Podcasts</button>
+          <button className="bg-white text-black px-4 py-1.5 rounded-full text-sm font-semibold transition hover:scale-105">All</button>
+          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">Music</button>
+          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">Podcasts</button>
         </div>
       )}
 
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
-
-        {activeTab === 'home' && !isFullScreenTrendingOpen && (
+        
+        {/* --- TAB: HOME --- */}
+        {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
-            {homeFilter !== 'podcasts' && (
-              <section>
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
-                    <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
-                  </div>
-                  <span 
-                    onClick={openFullScreenTrending}
-                    className="text-xs font-bold text-gray-400 hover:text-white cursor-pointer uppercase tracking-wider transition-colors"
-                  >
-                    See All
-                  </span>
+            <section>
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
+                  <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
                 </div>
+                <button 
+                  onClick={() => { setActiveTab('search'); setSearchQuery('Trending 2026'); }}
+                  className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider px-3 py-1 bg-[#222] rounded-md"
+                >
+                  See All
+                </button>
+              </div>
 
-                {isLoading ? (
-                  <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
-                ) : (
-                  <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
-                    {suggestionColumns.map((column, colIdx) => (
-                      <div key={colIdx} className="flex flex-col gap-2 min-w-[300px] max-w-[310px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
-                        {column.map((song: any, songIdx: number) => {
-                          const globalIdx = colIdx * 5 + songIdx;
-                          const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
-                          const liked = isSongLiked(song.videoId);
+              {isLoading ? (
+                <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
+              ) : (
+                <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
+                  {suggestionColumns.map((column, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
+                      {column.map((song: any, songIdx: number) => {
+                        const globalIdx = colIdx * 5 + songIdx;
+                        const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
+                        const liked = isSongLiked(song.videoId);
 
-                          return (
-                            <div 
-                              key={songIdx} 
-                              onClick={() => playSong(song, suggestions, globalIdx)} 
-                              className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
-                            >
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
-                                   {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
-                                   {currentTrack?.videoId === song.videoId && isPlaying && (
-                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                       <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-                                     </div>
-                                   )}
-                                </div>
-                                <div className="flex flex-col overflow-hidden pr-2">
-                                  <span className={`text-base font-medium truncate w-32 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                    {song.title}
-                                  </span>
-                                  <span className="text-sm text-gray-400 truncate w-32">{artistName}</span>
-                                </div>
+                        return (
+                          <div 
+                            key={songIdx} 
+                            onClick={() => playSong(song, suggestions, globalIdx)} 
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
+                                 {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                                 {currentTrack?.videoId === song.videoId && isPlaying && (
+                                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                     <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                                   </div>
+                                 )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
-                                  {liked ? (
-                                    <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                  ) : (
-                                    <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                                  )}
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); setCurrentTrack(song); setIsMenuOpen(true); }}
-                                  className="p-1 text-gray-400 hover:text-white"
-                                >
-                                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                                </button>
+                              <div className="flex flex-col overflow-hidden pr-2">
+                                <span className={`text-base font-medium truncate w-32 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                  {song.title}
+                                </span>
+                                <span className="text-sm text-gray-400 truncate w-32">{artistName}</span>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
+                            <div className="flex items-center gap-2">
+                              <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
+                                {liked ? (
+                                  <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                ) : (
+                                  <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
-            {history.length > 0 && homeFilter !== 'podcasts' && (
+            {history.length > 0 && (
               <section className="mt-2">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold tracking-tight">Recently Played</h2>
                 </div>
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {historyColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-2 min-w-[300px] max-w-[310px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
@@ -722,12 +624,6 @@ export default function Home() {
                                 <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); setCurrentTrack(song); setIsMenuOpen(true); }}
-                              className="p-1 text-gray-400 hover:text-white"
-                            >
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                            </button>
                           </div>
                         );
                       })}
@@ -737,157 +633,29 @@ export default function Home() {
               </section>
             )}
 
-            {homeFilter !== 'podcasts' && (
-              <section className="mt-4">
-                <h2 className="text-xl font-bold tracking-tight mb-3">Recommended Vibes For You</h2>
-                <div className="flex flex-col gap-1">
-                  {randomSongs.slice(0, visibleRandomCount).map((song, idx) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => playSong(song, randomSongs, idx)}
-                      className="flex items-center justify-between py-2.5 px-2 hover:bg-white/5 cursor-pointer transition-all border-b border-white/5"
-                    >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-                          {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
-                        </div>
-                        <div className="flex flex-col overflow-hidden">
-                          <span className="text-sm font-semibold truncate">{song.title}</span>
-                          <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
-                          {isSongLiked(song.videoId) ? (
-                            <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                          ) : (
-                            <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                          )}
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setCurrentTrack(song); setIsMenuOpen(true); }} className="p-1 text-gray-400 hover:text-white">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {visibleRandomCount < randomSongs.length && (
-                  <button 
-                    onClick={() => setVisibleRandomCount(prev => prev + 5)}
-                    className="mt-4 text-xs font-bold text-gray-400 hover:text-white block mx-auto py-2 px-5 bg-zinc-900 rounded-full border border-zinc-800"
-                  >
-                    Show More
-                  </button>
-                )}
-              </section>
-            )}
-
-            {homeFilter === 'podcasts' && (
-              <div className="py-12 text-center text-gray-400">
-                <p className="text-sm">Podcast dan acara bincang-bincang akan muncul di sini.</p>
-              </div>
-            )}
-
           </div>
         )}
 
-        {isFullScreenTrendingOpen && (
-          <div className="fixed inset-0 bg-black z-50 overflow-y-auto p-6 flex flex-col gap-4 animate-fade-in">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-2xl font-bold">Global Trending Hits 2026</h2>
-              <button 
-                onClick={() => setIsFullScreenTrendingOpen(false)}
-                className="bg-zinc-800 text-white text-xs px-4 py-2 rounded-full font-bold"
-              >
-                Tutup
-              </button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {searchResults.map((song, idx) => (
-                <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <img src={song.thumbnails?.[0]?.url} className="w-12 h-12 rounded-lg object-cover" />
-                    <div className="flex flex-col overflow-hidden">
-                      <span className="font-semibold text-sm truncate">{song.title}</span>
-                      <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'search' && !isFullScreenTrendingOpen && (
+        {/* --- TAB: SEARCH --- */}
+        {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
             <form onSubmit={handleSearch} className="mb-6 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-6 w-6 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </div>
               <input 
                 type="text" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white text-black font-semibold px-4 py-3 rounded-xl focus:outline-none placeholder-gray-500 text-sm" 
-                placeholder="Lagu, artis, atau username..." 
+                className="w-full bg-white text-black font-semibold px-10 py-3 rounded-md focus:outline-none placeholder-gray-500" 
+                placeholder="What do you want to listen to?" 
               />
             </form>
 
-            <div className="mb-6">
-              <input 
-                type="text"
-                placeholder="Cari Pengguna..."
-                value={userSearchQuery}
-                onChange={(e) => searchOtherUsers(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs px-4 py-2.5 rounded-xl text-white mb-2"
-              />
-              {userSearchResults.length > 0 && (
-                <div className="space-y-2">
-                  {userSearchResults.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                      <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setViewedProfile(user); setActiveTab('profile'); }}>
-                        <img src={user.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'} className="w-9 h-9 rounded-full object-cover" />
-                        <div>
-                          <p className="text-xs font-bold">{user.username}</p>
-                          <p className="text-[10px] text-gray-400">{user.full_name}</p>
-                        </div>
-                      </div>
-                      {user.id !== session?.user?.id && (
-                        <button onClick={() => sendFriendRequest(user.id)} className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg font-medium">
-                          Ikuti
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {searchHistory.length > 0 && !searchQuery && (
-              <div className="mb-6">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Riwayat Pencarian</h3>
-                <div className="space-y-1">
-                  {searchHistory.slice(0, visibleHistoryCount).map((item, idx) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => { setSearchQuery(item); handleSearch({ preventDefault: () => {} } as any); }}
-                      className="text-sm p-2 bg-zinc-900/50 rounded-lg hover:bg-zinc-800 cursor-pointer flex justify-between"
-                    >
-                      <span>{item}</span>
-                      <span className="text-xs text-gray-500">Cari</span>
-                    </div>
-                  ))}
-                </div>
-                {visibleHistoryCount < searchHistory.length && (
-                  <button onClick={() => setVisibleHistoryCount(prev => prev + 5)} className="text-xs text-gray-400 mt-2 hover:text-white">
-                    Show More
-                  </button>
-                )}
-              </div>
-            )}
-
             <div className="flex flex-col gap-2">
                {isLoading ? (
-                  <div className="text-center text-gray-400 mt-10">Mencari...</div>
+                  <div className="text-center text-gray-400 mt-10">Searching...</div>
                ) : searchResults.length > 0 ? (
                  searchResults.map((song, idx) => (
                    <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
@@ -918,6 +686,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* --- TAB: LIBRARY --- */}
         {activeTab === 'library' && (
           <div className="animate-fade-in pt-4">
             <div className="flex justify-between items-center mb-6">
@@ -933,28 +702,15 @@ export default function Home() {
             {activePlaylistView ? (
               <div className="flex flex-col gap-4">
                 <button onClick={() => setActivePlaylistView(null)} className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1">
-                  Kembali ke Library
+                  ← Kembali ke Library
                 </button>
                 <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2">
-                  <h2 className="text-2xl font-black mb-1">{activePlaylistView.title || activePlaylistView.name}</h2>
-                  <p className="text-xs text-gray-400">{activePlaylistView.is_collaborative ? 'Collaborative Playlist' : 'Personal Playlist'}</p>
-                  
-                  {activePlaylistView.is_collaborative && playlistContributors.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-white/10">
-                      <p className="text-[11px] font-semibold text-gray-300 mb-1">Kontributor Playlist:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {playlistContributors.map((c, i) => (
-                          <span key={i} className="text-[10px] bg-white/10 px-2.5 py-1 rounded-full text-gray-200">
-                            {c.name}: {c.percentage}% ({c.count} lagu)
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <h2 className="text-2xl font-black mb-1">{activePlaylistView.name}</h2>
+                  <p className="text-xs text-gray-400">{activePlaylistView.songs.length} lagu di dalam playlist ini</p>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  {activePlaylistView.songs?.length > 0 ? (
+                  {activePlaylistView.songs.length > 0 ? (
                     activePlaylistView.songs.map((song: any, idx: number) => (
                       <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
                         <div className="flex items-center gap-3 overflow-hidden">
@@ -963,13 +719,13 @@ export default function Home() {
                           </div>
                           <div className="flex flex-col overflow-hidden">
                             <span className="text-sm font-semibold truncate">{song.title}</span>
-                            <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')} {song.addedByUsername ? `• Ditambahkan oleh ${song.addedByUsername}` : ''}</span>
+                            <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
                           </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-center text-gray-500 py-10 text-sm">Playlist ini masih kosong. Tambahkan lagu dari menu titik tiga lagu.</p>
+                    <p className="text-center text-gray-500 py-10 text-sm">Playlist ini masih kosong. Tambahkan lagu dari menu titik tiga lagu!</p>
                   )}
                 </div>
               </div>
@@ -997,23 +753,23 @@ export default function Home() {
                     playlists.map((pl) => (
                       <div 
                         key={pl.id} 
-                        onClick={() => openPlaylistDetail(pl)}
+                        onClick={() => setActivePlaylistView(pl)}
                         className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center font-bold text-lg text-gray-400">
-                            {pl.title?.charAt(0).toUpperCase()}
+                            {pl.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <h4 className="font-semibold text-white">{pl.title}</h4>
-                            <p className="text-xs text-gray-400">{pl.is_collaborative ? 'Collaborative' : 'Personal'}</p>
+                            <h4 className="font-semibold text-white">{pl.name}</h4>
+                            <p className="text-xs text-gray-400">{pl.songs.length} lagu</p>
                           </div>
                         </div>
                         <span className="text-gray-400">→</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-gray-500 italic">Belum ada playlist kustom. Klik tombol Buat Playlist di atas.</p>
+                    <p className="text-xs text-gray-500 italic">Belum ada playlist kustom. Klik tombol "Buat Playlist" di atas.</p>
                   )}
                 </div>
               </div>
@@ -1021,76 +777,63 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'profile' && viewedProfile && (
-          <div className="animate-fade-in -mx-4 -mt-2">
-            <div className="relative h-44 w-full bg-zinc-800">
-              <img src={viewedProfile.banner_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} className="w-full h-full object-cover" />
+        {/* --- TAB: PROFILE --- */}
+        {activeTab === 'profile' && (
+          <div className="animate-fade-in pt-6 flex flex-col items-center">
+            <div className="w-24 h-24 mb-4 shadow-xl flex items-center justify-center">
+              {renderAvatar("w-24 h-24 text-2xl font-bold")}
             </div>
+            <h2 className="text-2xl font-bold mb-1">{username || 'User Icarus'}</h2>
+            <p className="text-xs text-gray-400 mb-6">{userEmail || 'user@icarus.music'}</p>
 
-            <div className="px-6 pb-6 text-center -mt-16 relative">
-              <div className="relative inline-block mx-auto">
-                <img 
-                  src={viewedProfile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'} 
-                  className="w-28 h-28 rounded-full object-cover border-4 border-black"
+            <form onSubmit={handleSaveProfile} className="w-full max-w-sm flex flex-col gap-4 bg-white/5 border border-white/10 p-5 rounded-2xl mb-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Edit Profil</h3>
+              
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Username</label>
+                <input 
+                  type="text" 
+                  value={tempUsername}
+                  onChange={(e) => setTempUsername(e.target.value)}
+                  placeholder="Masukkan username kamu..."
+                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
                 />
               </div>
 
-              <div className="mt-3">
-                <h2 className="text-xl font-bold">{viewedProfile.full_name || viewedProfile.username}</h2>
-                <p className="text-xs text-zinc-400">@{viewedProfile.username}</p>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">URL Foto Profil (Opsional)</label>
+                <input 
+                  type="text" 
+                  value={tempProfilePic}
+                  onChange={(e) => setTempProfilePic(e.target.value)}
+                  placeholder="https://contoh.com/foto.jpg"
+                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white"
+                />
               </div>
 
-              {viewedProfile.id === session?.user?.id && (
-                <button 
-                  onClick={() => setIsEditProfileOpen(true)}
-                  className="mt-4 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium px-5 py-2 rounded-full transition border border-zinc-700"
-                >
-                  Edit Profil
-                </button>
-              )}
+              <button type="submit" className="py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors">
+                Simpan Perubahan
+              </button>
+            </form>
 
-              <div className="grid grid-cols-4 gap-2 my-5">
-                <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] text-zinc-400">Liked</p>
-                  <p className="text-sm font-bold">{likedSongsList.length}</p>
-                </div>
-                <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] text-zinc-400">Playlists</p>
-                  <p className="text-sm font-bold">{playlists.length}</p>
-                </div>
-                <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] text-zinc-400">Followers</p>
-                  <p className="text-sm font-bold">{totalFollowers}</p>
-                </div>
-                <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] text-zinc-400">Following</p>
-                  <p className="text-sm font-bold">{totalFollowing}</p>
-                </div>
+            <div className="w-full max-w-sm flex flex-col gap-3">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
+                <span className="text-sm font-medium">Status Akun</span>
+                <span className="text-xs text-green-400 font-bold bg-green-500/10 px-2.5 py-1 rounded-full">Premium Active</span>
               </div>
-
-              <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-2xl text-left space-y-3">
-                <h3 className="text-xs font-semibold text-zinc-300">Pengaturan & Keamanan Akun</h3>
-                <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Enkripsi Sesi</span>
-                  <span className="text-emerald-400 font-medium">AES-256 Active</span>
-                </div>
-                <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Cloud Database</span>
-                  <span className="text-emerald-400 font-medium">Supabase Connected</span>
-                </div>
-              </div>
-
-              {viewedProfile.id === session?.user?.id && (
-                <button onClick={handleLogout} className="mt-6 w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 py-2.5 rounded-xl text-xs font-semibold transition">
-                  Keluar Akun (Logout)
-                </button>
-              )}
+              <button 
+                onClick={handleLogout}
+                className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors"
+              >
+                Keluar Akun (Logout)
+              </button>
             </div>
           </div>
         )}
 
       </div>
 
+      {/* MINI PLAYER */}
       {currentTrack && !isPlayerOpen && (
         <div 
           onClick={() => setIsPlayerOpen(true)}
@@ -1131,6 +874,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* FULL SCREEN PLAYER */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -1209,6 +953,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Lyrics Section */}
             <div className="px-6 mt-4 pb-12">
               <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
                 <div className="flex justify-between items-center mb-6 sticky top-0 bg-inherit pt-1 pb-3 border-b border-white/10 z-10">
@@ -1241,6 +986,7 @@ export default function Home() {
         )}
       </div>
 
+      {/* THREE DOTS MENU MODAL */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
           <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1271,65 +1017,42 @@ export default function Home() {
         </div>
       )}
 
+      {/* MODAL: CREATE PLAYLIST */}
       {isCreatePlaylistOpen && (
         <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
             <h3 className="text-lg font-bold">Buat Playlist Baru</h3>
             <input 
               type="text" 
-              placeholder="Nama playlist..." 
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 px-3 py-2.5 rounded-xl text-xs text-white focus:outline-none"
+              placeholder="Nama playlist (mis: Lagu Galau 2026)"
+              className="w-full bg-[#2a2a2a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white"
+              autoFocus
             />
-            <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={newPlaylistType} 
-                onChange={(e) => setNewPlaylistType(e.target.checked)}
-                className="rounded bg-zinc-800 border-zinc-700"
-              />
-              Jadikan Collaborative Playlist (Bersama Teman)
-            </label>
             <div className="flex gap-2 mt-2">
-              <button type="button" onClick={() => setIsCreatePlaylistOpen(false)} className="flex-1 py-2.5 bg-zinc-800 text-gray-300 font-semibold rounded-xl text-xs">Batal</button>
-              <button type="submit" className="flex-1 py-2.5 bg-white text-black font-bold rounded-xl text-xs">Buat</button>
+              <button type="button" onClick={() => setIsCreatePlaylistOpen(false)} className="flex-1 py-3 bg-[#2a2a2a] text-gray-300 font-semibold rounded-xl text-xs">Batal</button>
+              <button type="submit" className="flex-1 py-3 bg-white text-black font-bold rounded-xl text-xs">Simpan</button>
             </div>
           </form>
         </div>
       )}
 
+      {/* MODAL: ADD SONG TO PLAYLIST SELECTION */}
       {isAddToPlaylistOpen && (
         <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsAddToPlaylistOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
-            <h3 className="text-lg font-bold">Pilih atau Buat Playlist Baru</h3>
-
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Nama playlist baru..." 
-                value={inlinePlaylistName}
-                onChange={(e) => setInlinePlaylistName(e.target.value)}
-                className="flex-1 bg-zinc-800 border border-zinc-700 px-3 py-2 rounded-xl text-xs text-white focus:outline-none"
-              />
-              <button 
-                onClick={handleCreateInlinePlaylistAndAdd}
-                className="bg-white text-black font-bold px-3 py-2 rounded-xl text-xs"
-              >
-                Buat dan Tambah
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto mt-2">
+            <h3 className="text-lg font-bold">Pilih Playlist</h3>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
               {playlists.length > 0 ? (
                 playlists.map((pl) => (
                   <div key={pl.id} onClick={() => addSongToPlaylist(pl.id)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer flex justify-between items-center text-sm font-medium">
-                    <span>{pl.title}</span>
-                    <span className="text-xs text-gray-400">{pl.is_collaborative ? 'Collaborative' : 'Personal'}</span>
+                    <span>{pl.name}</span>
+                    <span className="text-xs text-gray-400">{pl.songs.length} lagu</span>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-gray-400 text-center py-4">Belum ada playlist.</p>
+                <p className="text-xs text-gray-400 text-center py-6">Belum ada playlist. Buat terlebih dahulu di menu Library.</p>
               )}
             </div>
             <button onClick={() => setIsAddToPlaylistOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] text-gray-300 font-semibold rounded-xl text-xs mt-2">Tutup</button>
@@ -1337,70 +1060,28 @@ export default function Home() {
         </div>
       )}
 
-      {isEditProfileOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsEditProfileOpen(false)}>
-          <form onSubmit={handleUpdateProfile} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-3 shadow-2xl">
-            <h3 className="text-lg font-bold mb-1">Edit Profil</h3>
-            
-            <input 
-              type="text" 
-              value={editFullName} 
-              onChange={(e) => setEditFullName(e.target.value)} 
-              placeholder="Nama Lengkap" 
-              className="bg-zinc-800 border border-zinc-700 p-2.5 rounded-xl text-xs text-white"
-            />
-            <input 
-              type="text" 
-              value={editUsername} 
-              onChange={(e) => setEditUsername(e.target.value)} 
-              placeholder="Username" 
-              className="bg-zinc-800 border border-zinc-700 p-2.5 rounded-xl text-xs text-white"
-            />
-            <input 
-              type="text" 
-              value={editAvatarUrl} 
-              onChange={(e) => setEditAvatarUrl(e.target.value)} 
-              placeholder="URL Foto Profil" 
-              className="bg-zinc-800 border border-zinc-700 p-2.5 rounded-xl text-xs text-white"
-            />
-            <input 
-              type="text" 
-              value={editBannerUrl} 
-              onChange={(e) => setEditBannerUrl(e.target.value)} 
-              placeholder="URL Banner Sampul" 
-              className="bg-zinc-800 border border-zinc-700 p-2.5 rounded-xl text-xs text-white"
-            />
-
-            <div className="flex gap-2 mt-2">
-              <button type="button" onClick={() => setIsEditProfileOpen(false)} className="flex-1 py-2.5 bg-zinc-800 text-gray-300 font-semibold rounded-xl text-xs">Batal</button>
-              <button type="submit" className="flex-1 py-2.5 bg-white text-black font-bold rounded-xl text-xs">Simpan</button>
-            </div>
-          </form>
-        </div>
-      )}
-
+      {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
-        <div onClick={() => { setIsFullScreenTrendingOpen(false); setActiveTab('home'); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' && !isFullScreenTrendingOpen ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+        <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           <span className="text-[10px] font-medium">Home</span>
         </div>
 
-        <div onClick={() => { setIsFullScreenTrendingOpen(false); setActiveTab('search'); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'search' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+        <div onClick={() => setActiveTab('search')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'search' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'search' ? "3" : "2"} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <span className="text-[10px] font-medium">Search</span>
         </div>
 
-        <div onClick={() => { setIsFullScreenTrendingOpen(false); setActiveTab('library'); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+        <div onClick={() => setActiveTab('library')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'library' ? "3" : "2"} viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h13.4a.5.5 0 0 1 .49.6l-1 5.2a.5.5 0 0 1-.49.4h-1.4"></path><path d="M4 19a2 2 0 0 0 2 2h14"></path><path d="M4 19h14"></path><path d="M8 12h8"></path><path d="M8 16h6"></path></svg>
           <span className="text-[10px] font-medium">Library</span>
         </div>
 
-        <div onClick={() => { setIsFullScreenTrendingOpen(false); setViewedProfile(profile); setActiveTab('profile'); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+        <div onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
           <span className="text-[10px] font-medium">Profile</span>
         </div>
       </div>
-
     </div>
   );
-            }
+}
