@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
-// Helper function format waktu (0:00)
 const formatTime = (seconds: number) => {
   if (isNaN(seconds)) return '0:00';
   const m = Math.floor(seconds / 60);
@@ -13,14 +12,11 @@ const formatTime = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-// Helper function untuk menjernihkan Cover Image (mengubah resolusi dari URL)
 const getHighResCover = (url?: string) => {
   if (!url) return '';
-  // Jika URL dari Google/YT Music, ubah parameter sizenya jadi 1080x1080
   if (url.includes('=w')) {
     return url.replace(/=w\d+-h\d+/, '=w1080-h1080');
   }
-  // Jika URL dari YT biasa, ganti default jadi maxresdefault
   if (url.includes('ytimg.com')) {
     return url.replace('hqdefault.jpg', 'maxresdefault.jpg').replace('default.jpg', 'maxresdefault.jpg');
   }
@@ -30,26 +26,22 @@ const getHighResCover = (url?: string) => {
 export default function Home() {
   const [activeTab, setActiveTab] = useState('home'); 
   
-  // Data States
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Player States
   const playerRef = useRef<any>(null);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   
-  // Progress & Duration States
-  const [playedProgress, setPlayedProgress] = useState(0); // 0 to 1
+  const [playedProgress, setPlayedProgress] = useState(0); 
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Lyrics States
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
 
@@ -59,7 +51,6 @@ export default function Home() {
     loadHomepageData(savedHistory);
   }, []);
 
-  // Fetch Lyrics otomatis saat ganti lagu
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
@@ -68,7 +59,6 @@ export default function Home() {
       const fetchLyrics = async () => {
         try {
           const artist = currentTrack.artists?.[0]?.name || '';
-          // Bersihkan judul lagu dari teks seperti "(Official Video)" agar API gampang nyarinya
           const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').split(' - ')[0] || '';
           
           const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
@@ -121,13 +111,15 @@ export default function Home() {
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
-  // Fungsi untuk klik di progress bar buat dicepetin/dimundurin
+  // PERBAIKAN POIN 1: Akurasi Seeking Progress Bar
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const bounds = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - bounds.left) / bounds.width;
-    setPlayedProgress(percent);
-    if (playerRef.current) {
-      playerRef.current.seekTo(percent, 'fraction');
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickPosition = (e.clientX - rect.left) / rect.width;
+    const clampedPosition = Math.max(0, Math.min(1, clickPosition));
+    
+    setPlayedProgress(clampedPosition);
+    if (playerRef.current && duration > 0) {
+      playerRef.current.seekTo(clampedPosition, 'fraction');
     }
   };
 
@@ -148,7 +140,6 @@ export default function Home() {
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
-      {/* HIDDEN YOUTUBE PLAYER */}
       {currentTrack && (
         <div className="hidden">
           <ReactPlayer
@@ -172,7 +163,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* TOP HEADER */}
       {activeTab === 'home' && (
         <div className="sticky top-0 bg-black/90 backdrop-blur-md z-40 px-4 py-4 flex gap-3 items-center">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-xs font-bold shadow-md">
@@ -190,10 +180,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* MAIN CONTENT AREA */}
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
-        
-        {/* VIEW: HOME */}
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             <section>
@@ -215,7 +202,7 @@ export default function Home() {
                            )}
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                          <span className={`text-base font-medium truncate ${currentTrack?.videoId === song.videoId ? 'text-white' : 'text-white'}`}>
+                          <span className={`text-base font-medium truncate ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
                             {song.title}
                           </span>
                           <span className="text-sm text-gray-400 truncate">
@@ -232,7 +219,6 @@ export default function Home() {
               )}
             </section>
 
-            {/* History */}
             {history.length > 0 && (
               <section>
                 <h2 className="text-xl font-bold tracking-tight mb-4">Your recent rotation</h2>
@@ -264,7 +250,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* VIEW: SEARCH */}
         {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
@@ -311,7 +296,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* FLOATING MINI PLAYER */}
       {currentTrack && !isPlayerOpen && (
         <div 
           onClick={() => setIsPlayerOpen(true)}
@@ -341,14 +325,12 @@ export default function Home() {
             </div>
           </div>
           
-          {/* Progress Bar Bawah */}
-          <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
+          <div onClick={(e) => { e.stopPropagation(); }} className="absolute bottom-0 left-2 right-2 h-[2px] bg-gray-600 rounded-full overflow-hidden">
             <div className="h-full bg-white transition-all duration-300 ease-linear" style={{ width: `${playedProgress * 100}%` }}></div>
           </div>
         </div>
       )}
 
-      {/* FULL SCREEN PLAYER OVERLAY */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -356,8 +338,7 @@ export default function Home() {
       >
         {currentTrack && (
           <>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-6 sticky top-0 bg-transparent z-10">
+            <div className="flex items-center justify-between px-6 py-6 sticky top-0 bg-[#2a2a2a]/80 backdrop-blur-md z-10">
               <button onClick={() => setIsPlayerOpen(false)} className="p-2 -ml-2">
                 <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
               </button>
@@ -371,7 +352,6 @@ export default function Home() {
             </div>
 
             <div className="px-8 mt-2 flex flex-col items-center">
-              {/* Cover Art Besar (Sudah HD!) */}
               <div className="w-full aspect-square bg-gray-900 shadow-2xl mb-10 overflow-hidden rounded-md">
                 {currentTrack.thumbnails?.[0]?.url && (
                   <img 
@@ -382,7 +362,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Title & Artist */}
               <div className="w-full flex justify-between items-center mb-8">
                 <div className="overflow-hidden mr-4">
                   <h2 className="text-2xl font-bold truncate text-white mb-1">{currentTrack.title}</h2>
@@ -395,16 +374,16 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Progress Bar (Aktif & Bisa Di-klik) */}
+              {/* PROGRESS BAR (DI-FIX AGAR BISA KLIK SEEK) */}
               <div className="w-full mb-6">
                 <div 
                   onClick={handleSeek} 
-                  className="h-[4px] bg-gray-600 rounded-full w-full relative group cursor-pointer"
+                  className="h-[6px] bg-gray-600 rounded-full w-full relative group cursor-pointer"
                 >
-                  <div className="h-full bg-white rounded-full absolute top-0 left-0" style={{ width: `${playedProgress * 100}%` }}></div>
+                  <div className="h-full bg-white rounded-full absolute top-0 left-0 pointer-events-none" style={{ width: `${playedProgress * 100}%` }}></div>
                   <div 
-                     className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
-                     style={{ left: `calc(${playedProgress * 100}% - 6px)` }}
+                     className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none" 
+                     style={{ left: `calc(${playedProgress * 100}% - 7px)` }}
                   ></div>
                 </div>
                 <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-2">
@@ -413,7 +392,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Controls */}
               <div className="w-full flex items-center justify-between mb-10 px-2">
                 <button className="text-gray-400 hover:text-white">
                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
@@ -439,7 +417,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LYRICS SECTION */}
             <div className="px-6 mt-4 pb-12">
               <div className="bg-[#1e1e1e] rounded-xl p-6 shadow-lg min-h-[350px]">
                 <div className="flex justify-between items-center mb-6">
@@ -473,7 +450,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
         <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
