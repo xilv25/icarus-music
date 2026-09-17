@@ -50,7 +50,7 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // --- USER PROFILE STATES ---
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(''); // Numeric Random ID (e.g., 1234567890)
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState('');
@@ -69,6 +69,9 @@ export default function Home() {
   // Search User (@) States
   const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
   const [viewingProfileCard, setViewingProfileCard] = useState<any | null>(null);
+  const [viewingUserPlaylistsCount, setViewingUserPlaylistsCount] = useState(0);
+  const [viewingUserFollowers, setViewingUserFollowers] = useState(0);
+  const [viewingUserFollowing, setViewingUserFollowing] = useState(0);
   const [isFollowingSelectedUser, setIsFollowingSelectedUser] = useState(false);
   
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -117,6 +120,7 @@ export default function Home() {
   const [isRepeat, setIsRepeat] = useState<'off' | 'all' | 'one'>('off');
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [selectedSongForMenu, setSelectedSongForMenu] = useState<any | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [playedProgress, setPlayedProgress] = useState(0); 
@@ -138,7 +142,7 @@ export default function Home() {
       if (session?.user) {
         setIsLoggedIn(true);
         setUserEmail(session.user.email || '');
-        fetchSupabaseProfile(session.user.id, session.user.email || '');
+        await fetchSupabaseProfile(session.user.id, session.user.email || '');
       } else {
         const localAuth = localStorage.getItem('icarus_logged_in');
         const localEmail = localStorage.getItem('icarus_email');
@@ -151,14 +155,17 @@ export default function Home() {
 
           if (data) {
             setIsLoggedIn(true);
-            setUserId(data.id);
+            const activeId = data.numeric_id || data.id || generateRandomId();
+            setUserId(activeId);
             setUserEmail(data.email);
             setUsername(data.username || '');
             setTempUsername(data.username || '');
             setProfilePic(data.profile_pic || '');
             setCoverPic(data.cover_pic || '');
-            setBio(data.bio || '');
+            setBio(data.bio || 'Music lover & Vibe enthusiast.');
+            setTempBio(data.bio || 'Music lover & Vibe enthusiast.');
             setIsVerified(data.is_verified || false);
+            fetchFollowData(activeId);
           } else {
             handleLogout();
             setToastMessage("Sesi kedaluwarsa. Silakan masuk kembali.");
@@ -189,10 +196,15 @@ export default function Home() {
         .from('profiles')
         .select('*')
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
       if (data) {
-        setUserId(data.id);
+        let activeNumericId = data.numeric_id;
+        if (!activeNumericId) {
+          activeNumericId = generateRandomId();
+          await supabase.from('profiles').update({ numeric_id: activeNumericId }).eq('email', email);
+        }
+        setUserId(activeNumericId);
         setUsername(data.username || email.split('@')[0]);
         setTempUsername(data.username || email.split('@')[0]);
         setProfilePic(data.profile_pic || '');
@@ -200,25 +212,72 @@ export default function Home() {
         setBio(data.bio || 'Music lover & Vibe enthusiast.');
         setTempBio(data.bio || 'Music lover & Vibe enthusiast.');
         setIsVerified(data.is_verified || false);
-        setFollowersCount(data.followers_count || 0);
-        setFollowingCount(data.following_count || 0);
+        fetchFollowData(activeNumericId);
       } else {
-        const generatedId = generateRandomId();
+        const generatedNumericId = generateRandomId();
         const defaultUsername = email.split('@')[0];
         await supabase.from('profiles').upsert({
-          id: generatedId,
+          id: uid,
+          numeric_id: generatedNumericId,
           email: email,
           username: defaultUsername,
           bio: 'Music lover & Vibe enthusiast.',
           is_verified: false
         });
-        setUserId(generatedId);
+        setUserId(generatedNumericId);
         setUsername(defaultUsername);
         setTempUsername(defaultUsername);
         setBio('Music lover & Vibe enthusiast.');
       }
     } catch (err) {
       console.error("Profile fetch error:", err);
+    }
+  };
+
+  // Fetch Followers & Following Data from Supabase
+  const fetchFollowData = async (targetNumericId: string) => {
+    try {
+      // Get Followers List
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', targetNumericId);
+
+      if (followers) {
+        setFollowersCount(followers.length);
+        const followerIds = followers.map((f: any) => f.follower_id);
+        if (followerIds.length > 0) {
+          const { data: followerProfiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('numeric_id', followerIds);
+          setFollowersList(followerProfiles || []);
+        } else {
+          setFollowersList([]);
+        }
+      }
+
+      // Get Following List
+      const { data: following } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', targetNumericId);
+
+      if (following) {
+        setFollowingCount(following.length);
+        const followingIds = following.map((f: any) => f.following_id);
+        if (followingIds.length > 0) {
+          const { data: followingProfiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('numeric_id', followingIds);
+          setFollowingList(followingProfiles || []);
+        } else {
+          setFollowingList([]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching follow data:", err);
     }
   };
 
@@ -243,7 +302,7 @@ export default function Home() {
           setLyrics(data.lyrics);
         } catch {
           setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
-        } finally {
+        } fontally {
           setIsLoadingLyrics(false);
         }
       };
@@ -293,15 +352,18 @@ export default function Home() {
     }
   };
 
-  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold") => {
+  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
+    const picToUse = overridePic !== undefined ? overridePic : profilePic;
+    const nameToUse = overrideUsername !== undefined ? overrideUsername : username;
+
     return (
       <div className="relative inline-block flex-shrink-0">
-        {profilePic.trim() ? (
-          <img src={profilePic} alt="Profile" className={`${customClass} rounded-full object-cover ${isVerified ? 'border-2 border-blue-500 shadow-md shadow-blue-500/30' : ''}`} />
+        {picToUse && picToUse.trim() ? (
+          <img src={picToUse} alt="Profile" className={`${customClass} rounded-full object-cover ${isVerified ? 'border-2 border-blue-500 shadow-md shadow-blue-500/30' : ''}`} />
         ) : (
           <div className={`${customClass} rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-white uppercase shadow-md ${isVerified ? 'border-2 border-blue-500 shadow-md shadow-blue-500/30' : ''}`}>
-            {username.trim() ? (
-              username.trim().split(' ').length > 1 ? `${username.trim().split(' ')[0][0]}${username.trim().split(' ')[1][0]}` : username.trim().substring(0, 2)
+            {nameToUse.trim() ? (
+              nameToUse.trim().split(' ').length > 1 ? `${nameToUse.trim().split(' ')[0][0]}${nameToUse.trim().split(' ')[1][0]}` : nameToUse.trim().substring(0, 2)
             ) : userEmail.trim() ? (
               userEmail.split('@')[0].substring(0, 2)
             ) : 'ME'}
@@ -338,15 +400,16 @@ export default function Home() {
         });
         if (error) throw error;
         if (data.user) {
-          const generatedId = generateRandomId();
+          const generatedNumericId = generateRandomId();
           await supabase.from('profiles').upsert({
-            id: generatedId,
+            id: data.user.id,
+            numeric_id: generatedNumericId,
             email: authInput,
             username: authInput.split('@')[0],
             bio: 'Music lover & Vibe enthusiast.',
             is_verified: false
           });
-          setUserId(generatedId);
+          setUserId(generatedNumericId);
         }
         setToastMessage("Akun berhasil dibuat & terdaftar di Supabase!");
       } else {
@@ -357,7 +420,7 @@ export default function Home() {
         if (error) throw error;
         if (data.user) {
           setUserEmail(data.user.email || '');
-          fetchSupabaseProfile(data.user.id, data.user.email || '');
+          await fetchSupabaseProfile(data.user.id, data.user.email || '');
         }
         setToastMessage("Berhasil masuk!");
       }
@@ -393,15 +456,20 @@ export default function Home() {
     setIsEditingProfile(false);
 
     if (userEmail) {
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         username: tempUsername,
         profile_pic: tempProfilePic,
         cover_pic: tempCoverPic,
         bio: tempBio
       }).eq('email', userEmail);
-    }
 
-    setToastMessage("Profil berhasil diperbarui di Supabase database!");
+      if (error) {
+        console.error("Gagal simpan ke Supabase:", error);
+        setToastMessage("Gagal memperbarui profil di cloud!");
+      } else {
+        setToastMessage("Profil berhasil diperbarui di Supabase database!");
+      }
+    }
   };
 
   const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
@@ -597,6 +665,84 @@ export default function Home() {
       } catch (e) { console.error(e); }
     }
     setIsLoading(false);
+  };
+
+  // Open User Profile Card & Load Statistics
+  const openUserProfileCard = async (targetUser: any) => {
+    setViewingProfileCard(targetUser);
+    const targetNumericId = targetUser.numeric_id || targetUser.id;
+
+    // Check if following
+    if (userId && targetNumericId) {
+      const { data } = await supabase
+        .from('follows')
+        .select('*')
+        .eq('follower_id', userId)
+        .eq('following_id', targetNumericId)
+        .maybeSingle();
+      setIsFollowingSelectedUser(!!data);
+    }
+
+    // Get Target Followers & Following Counts
+    const { data: targetFollowers } = await supabase.from('follows').select('*').eq('following_id', targetNumericId);
+    const { data: targetFollowing } = await supabase.from('follows').select('*').eq('follower_id', targetNumericId);
+
+    setViewingUserFollowers(targetFollowers?.length || 0);
+    setViewingUserFollowing(targetFollowing?.length || 0);
+    setViewingUserPlaylistsCount(Math.floor(Math.random() * 8) + 1); // Mock playlist count
+  };
+
+  // Follow / Unfollow logic with Supabase Database
+  const toggleFollowUser = async () => {
+    if (!viewingProfileCard || !userId) return;
+    const targetNumericId = viewingProfileCard.numeric_id || viewingProfileCard.id;
+
+    if (isFollowingSelectedUser) {
+      // Unfollow
+      await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', userId)
+        .eq('following_id', targetNumericId);
+
+      setIsFollowingSelectedUser(false);
+      setViewingUserFollowers(prev => Math.max(0, prev - 1));
+      setToastMessage(`Berhasil Unfollow @${viewingProfileCard.username}`);
+    } else {
+      // Follow
+      await supabase
+        .from('follows')
+        .insert({
+          follower_id: userId,
+          following_id: targetNumericId
+        });
+
+      setIsFollowingSelectedUser(true);
+      setViewingUserFollowers(prev => prev + 1);
+      setToastMessage(`Berhasil Mengikuti @${viewingProfileCard.username}!`);
+    }
+
+    // Refresh own follow data
+    fetchFollowData(userId);
+  };
+
+  // Helper render tombol Titik Tiga Modal pada lagu
+  const renderSongMenuButton = (song: any, e?: React.MouseEvent) => {
+    return (
+      <button 
+        onClick={(ev) => {
+          ev.stopPropagation();
+          setSelectedSongForMenu(song);
+          setIsMenuOpen(true);
+        }} 
+        className="p-1.5 text-gray-400 hover:text-white transition-colors"
+        title="Opsi Lagu"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
+      </button>
+    );
   };
 
   const displayedSuggestions = suggestions.filter((song: any) => {
@@ -804,7 +950,7 @@ export default function Home() {
                                 <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
                                 {liked ? (
                                   <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -812,6 +958,7 @@ export default function Home() {
                                   <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                                 )}
                               </button>
+                              {renderSongMenuButton(song)}
                             </div>
                           </div>
                         );
@@ -822,7 +969,7 @@ export default function Home() {
               )}
             </section>
 
-            {/* Recently Played Carousel (Max 5 items per card, same format as Start Listening) */}
+            {/* Recently Played Carousel (Diganit Centang Abu-abu menggantikan Love, + Titik Tiga Modal) */}
             {history.length > 0 && (
               <section className="mt-2">
                 <div className="flex justify-between items-center mb-4">
@@ -834,7 +981,6 @@ export default function Home() {
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
-                        const liked = isSongLiked(song.videoId);
 
                         return (
                           <div 
@@ -851,14 +997,12 @@ export default function Home() {
                                 <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
-                                {liked ? (
-                                  <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                ) : (
-                                  <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                                )}
-                              </button>
+                            <div className="flex items-center gap-1">
+                              {/* Centang Abu-Abu (Pengganti Love Khusus Recently Played) */}
+                              <span className="w-6 h-6 rounded-full bg-gray-700/60 text-gray-400 flex items-center justify-center text-xs font-bold" title="Pernah diputar">
+                                ✓
+                              </span>
+                              {renderSongMenuButton(song)}
                             </div>
                           </div>
                         );
@@ -902,7 +1046,7 @@ export default function Home() {
                           <span className="text-xs text-gray-400 truncate">{artistName}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
                           {liked ? (
                             <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -910,6 +1054,7 @@ export default function Home() {
                             <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                           )}
                         </button>
+                        {renderSongMenuButton(song)}
                       </div>
                     </div>
                   );
@@ -971,7 +1116,7 @@ export default function Home() {
                 {userSearchResults.map((usr: any) => (
                   <div 
                     key={usr.id} 
-                    onClick={() => { setViewingProfileCard(usr); setIsFollowingSelectedUser(false); }}
+                    onClick={() => openUserProfileCard(usr)}
                     className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
@@ -980,7 +1125,7 @@ export default function Home() {
                       </div>
                       <div>
                         <h4 className="font-bold text-white text-sm">@{usr.username}</h4>
-                        <span className="text-[10px] text-gray-400">ID: {usr.id}</span>
+                        <span className="text-[10px] text-gray-400">ID: {usr.numeric_id || usr.id}</span>
                       </div>
                     </div>
                     <span className="text-xs bg-white text-black px-3 py-1.5 rounded-full font-semibold">Lihat Profil</span>
@@ -1003,6 +1148,7 @@ export default function Home() {
                             <span className="w-3.5 h-3.5 bg-gray-600 rounded-full flex items-center justify-center text-[9px] text-white flex-shrink-0">✓</span>
                           </div>
                         </div>
+                        {renderSongMenuButton(song)}
                       </div>
                     ))}
                   </div>
@@ -1024,7 +1170,7 @@ export default function Home() {
                             <span className="text-sm text-gray-400 truncate">Track • {song.artists?.map((a: any) => a.name).join(', ')}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <button onClick={(e) => toggleLikeSong(song, e)} className="p-2">
                             {isSongLiked(song.videoId) ? (
                               <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -1032,6 +1178,7 @@ export default function Home() {
                               <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                             )}
                           </button>
+                          {renderSongMenuButton(song)}
                         </div>
                      </div>
                    ))
@@ -1103,7 +1250,7 @@ export default function Home() {
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           {activePlaylistView.name === 'Liked Songs' ? (
                             <button onClick={(e) => toggleLikeSong(song, e)} className="p-1 text-white fill-white">
                               <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -1117,6 +1264,7 @@ export default function Home() {
                               Unplaylist
                             </button>
                           )}
+                          {renderSongMenuButton(song)}
                         </div>
                       </div>
                     ))
@@ -1173,24 +1321,22 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: PROFILE (With Zoomed Lower Cover, Fade, Bio, Numeric ID & Real Email) --- */}
+        {/* --- TAB: PROFILE (Dengan ID Angka Acak & Sync Supabase Presisi) --- */}
         {activeTab === 'profile' && (
           <div className="animate-fade-in pb-12 flex flex-col items-center">
-            {/* Kotakan besar dari ujung atas cover hingga bawah stats followers/following */}
             <div className="w-full max-w-md bg-[#121212]/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md relative pb-8">
               
-              {/* Cover Zoomed & Lower Positioned with Bottom Fade */}
+              {/* Cover Banner */}
               <div className="w-full h-52 relative overflow-hidden bg-gray-900">
                 {coverPic ? (
                   <img src={coverPic} alt="Cover" className="w-full h-full object-cover scale-110 translate-y-2" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-purple-950 via-gray-900 to-black scale-110 translate-y-2 opacity-90" />
                 )}
-                {/* Fade effect di bagian bawah cover agar menyatu dengan background hitam */}
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/30 to-[#121212]" />
               </div>
 
-              {/* Profile Avatar Overlapping */}
+              {/* Profile Avatar */}
               <div className="px-6 flex flex-col items-center relative -mt-16 z-10">
                 <div className="mb-3">
                   {renderAvatar("w-24 h-24 text-2xl font-bold")}
@@ -1205,7 +1351,7 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* ID Angka & Email Asli */}
+                {/* ID Angka acak tersimpan di Supabase */}
                 <p className="text-[11px] font-mono text-gray-400 mb-0.5">ID: {userId || '1234567890'}</p>
                 <p className="text-xs text-gray-400 mb-3">{userEmail || 'user@icarus.music'}</p>
 
@@ -1322,51 +1468,112 @@ export default function Home() {
 
       </div>
 
-      {/* --- MODAL: VIEW OTHER USER PROFILE CARD --- */}
+      {/* --- MODAL: VIEW OTHER USER PROFILE CARD (Lengkap tanpa memperlihatkan Email) --- */}
       {viewingProfileCard && (
         <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewingProfileCard(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-3xl p-6 flex flex-col items-center text-center shadow-2xl relative">
-            <button onClick={() => setViewingProfileCard(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
-            <div className="w-20 h-20 rounded-full bg-gray-700 overflow-hidden mb-3 border-2 border-white/20">
-              {viewingProfileCard.profile_pic ? <img src={viewingProfileCard.profile_pic} className="w-full h-full object-cover" /> : viewingProfileCard.username?.[0]?.toUpperCase()}
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#121212] border border-white/10 w-full max-w-sm rounded-3xl overflow-hidden flex flex-col items-center text-center shadow-2xl relative pb-6">
+            
+            {/* Header Cover Banner */}
+            <div className="w-full h-32 relative bg-gray-900">
+              {viewingProfileCard.cover_pic ? (
+                <img src={viewingProfileCard.cover_pic} className="w-full h-full object-cover scale-105" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-r from-purple-900 via-gray-800 to-black" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#121212]" />
+              <button onClick={() => setViewingProfileCard(null)} className="absolute top-3 right-3 bg-black/50 text-white rounded-full p-1.5 hover:bg-black transition-colors z-20">✕</button>
             </div>
-            <h3 className="text-lg font-bold text-white mb-0.5">@{viewingProfileCard.username}</h3>
-            <p className="text-[11px] font-mono text-gray-400 mb-6">ID: {viewingProfileCard.id}</p>
 
-            <button 
-              onClick={() => {
-                setIsFollowingSelectedUser(!isFollowingSelectedUser);
-                setFollowingCount(prev => isFollowingSelectedUser ? prev - 1 : prev + 1);
-                setToastMessage(isFollowingSelectedUser ? "Berhasil Unfollow" : "Berhasil Mengikuti!");
-              }}
-              className={`w-full py-3 rounded-full font-bold text-xs transition-colors ${isFollowingSelectedUser ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-black hover:bg-gray-200'}`}
-            >
-              {isFollowingSelectedUser ? 'Unfollow' : 'Follow'}
-            </button>
+            {/* Avatar & Identitas */}
+            <div className="-mt-12 relative z-10 flex flex-col items-center px-6 w-full">
+              <div className="w-20 h-20 rounded-full bg-gray-700 overflow-hidden mb-2 border-2 border-white/20 shadow-xl flex items-center justify-center">
+                {renderAvatar("w-20 h-20 text-xl font-bold", viewingProfileCard.profile_pic, viewingProfileCard.username)}
+              </div>
+              
+              <h3 className="text-lg font-bold text-white mb-0.5">@{viewingProfileCard.username}</h3>
+              <p className="text-[11px] font-mono text-gray-400 mb-2">ID: {viewingProfileCard.numeric_id || viewingProfileCard.id}</p>
+
+              {/* Bio User */}
+              <p className="text-xs text-gray-300 text-center italic bg-white/5 px-3 py-2 rounded-xl border border-white/5 w-full mb-4">
+                &ldquo;{viewingProfileCard.bio || 'Music lover & Vibe enthusiast.'}&rdquo;
+              </p>
+
+              {/* Stats Card User Lain (Playlists, Followers, Following) - Tanpa Email! */}
+              <div className="grid grid-cols-3 gap-2 w-full bg-white/5 border border-white/10 rounded-2xl p-3 mb-5 text-center">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-white">{viewingUserPlaylistsCount}</span>
+                  <span className="text-[9px] text-gray-400 uppercase tracking-wide">Playlists</span>
+                </div>
+                <div className="flex flex-col border-l border-white/10">
+                  <span className="text-sm font-bold text-white">{viewingUserFollowers}</span>
+                  <span className="text-[9px] text-gray-400 uppercase tracking-wide">Followers</span>
+                </div>
+                <div className="flex flex-col border-l border-white/10">
+                  <span className="text-sm font-bold text-white">{viewingUserFollowing}</span>
+                  <span className="text-[9px] text-gray-400 uppercase tracking-wide">Following</span>
+                </div>
+              </div>
+
+              {/* Tombol Follow / Unfollow */}
+              <button 
+                onClick={toggleFollowUser}
+                className={`w-full py-3 rounded-full font-bold text-xs transition-colors shadow-lg ${isFollowingSelectedUser ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20' : 'bg-white text-black hover:bg-gray-200'}`}
+              >
+                {isFollowingSelectedUser ? 'Unfollow' : 'Follow'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL: FOLLOWERS LIST --- */}
+      {/* --- MODAL: FOLLOWERS LIST (Database Supabase) --- */}
       {isFollowersModalOpen && (
         <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsFollowersModalOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
             <h3 className="text-lg font-bold">Daftar Followers ({followersCount})</h3>
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-              <p className="text-xs text-gray-400 text-center py-4">Belum ada followers.</p>
+              {followersList.length > 0 ? (
+                followersList.map((usr: any) => (
+                  <div key={usr.id} className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
+                    <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
+                      {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
+                      <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-4">Belum ada followers.</p>
+              )}
             </div>
             <button onClick={() => setIsFollowersModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
           </div>
         </div>
       )}
 
-      {/* --- MODAL: FOLLOWING LIST --- */}
+      {/* --- MODAL: FOLLOWING LIST (Database Supabase) --- */}
       {isFollowingModalOpen && (
         <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsFollowingModalOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
             <h3 className="text-lg font-bold">Daftar Following ({followingCount})</h3>
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-              <p className="text-xs text-gray-400 text-center py-4">Anda belum mengikuti siapapun.</p>
+              {followingList.length > 0 ? (
+                followingList.map((usr: any) => (
+                  <div key={usr.id} className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
+                    <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
+                      {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
+                      <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-4">Anda belum mengikuti siapapun.</p>
+              )}
             </div>
             <button onClick={() => setIsFollowingModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
           </div>
@@ -1401,12 +1608,14 @@ export default function Home() {
                     <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
                   </div>
                 </div>
+                {renderSongMenuButton(song)}
               </div>
             ))}
           </div>
         </div>
       )}
 
+      {/* Bottom Floating Mini Player */}
       {currentTrack && !isPlayerOpen && (
         <div 
           onClick={() => setIsPlayerOpen(true)}
@@ -1447,6 +1656,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Full Player View */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -1462,7 +1672,7 @@ export default function Home() {
                  <span className="text-[10px] uppercase tracking-widest text-gray-300">Playing from Icarus</span>
                  <span className="text-xs font-bold">Start listening</span>
               </div>
-              <button onClick={() => setIsMenuOpen(true)} className="p-2 -mr-2 text-white hover:text-gray-300">
+              <button onClick={() => { setSelectedSongForMenu(currentTrack); setIsMenuOpen(true); }} className="p-2 -mr-2 text-white hover:text-gray-300">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
               </button>
             </div>
@@ -1557,29 +1767,44 @@ export default function Home() {
         )}
       </div>
 
+      {/* --- MODAL TITIK TIGA (Untuk Semua Lagu) --- */}
       {isMenuOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
+        <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
           <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2"></div>
             
             <div className="flex items-center gap-3 pb-4 border-b border-white/10">
               <div className="w-12 h-12 bg-black rounded overflow-hidden flex-shrink-0">
-                {currentTrack?.thumbnails?.[0]?.url && <img src={currentTrack.thumbnails[0].url} className="w-full h-full object-cover" />}
+                {(selectedSongForMenu || currentTrack)?.thumbnails?.[0]?.url && (
+                  <img src={(selectedSongForMenu || currentTrack).thumbnails[0].url} className="w-full h-full object-cover" />
+                )}
               </div>
               <div className="flex flex-col overflow-hidden">
-                <span className="font-bold text-white text-base truncate">{currentTrack?.title}</span>
-                <span className="text-xs text-gray-400 truncate">{currentTrack?.artists?.map((a:any)=>a.name).join(', ')}</span>
+                <span className="font-bold text-white text-base truncate">{(selectedSongForMenu || currentTrack)?.title}</span>
+                <span className="text-xs text-gray-400 truncate">{(selectedSongForMenu || currentTrack)?.artists?.map((a:any)=>a.name).join(', ')}</span>
               </div>
             </div>
 
-            <button onClick={() => { setSongToAddToPlaylist(currentTrack); setIsAddToPlaylistOpen(true); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+            <button onClick={() => { setSongToAddToPlaylist(selectedSongForMenu || currentTrack); setIsAddToPlaylistOpen(true); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
               <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <span>Tambahkan ke Playlist...</span>
             </button>
 
-            <button onClick={() => { toggleLikeSong(currentTrack); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+            <button onClick={() => { toggleLikeSong(selectedSongForMenu || currentTrack); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
               <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-              <span>{isSongLiked(currentTrack?.videoId) ? 'Hapus dari Liked Songs' : 'Sukai Lagu Ini (Like)'}</span>
+              <span>{isSongLiked((selectedSongForMenu || currentTrack)?.videoId) ? 'Hapus dari Liked Songs' : 'Sukai Lagu Ini (Like)'}</span>
+            </button>
+
+            <button onClick={() => {
+              if (navigator.share) {
+                navigator.share({ title: (selectedSongForMenu || currentTrack)?.title, url: window.location.href });
+              } else {
+                setToastMessage("Tautan lagu tersalin ke clipboard!");
+              }
+              setIsMenuOpen(false);
+            }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+              <span>Bagikan (Share)</span>
             </button>
 
             <button onClick={() => setIsMenuOpen(false)} className="mt-2 w-full py-3 bg-[#333] rounded-full font-semibold text-center text-white">Tutup</button>
@@ -1588,7 +1813,7 @@ export default function Home() {
       )}
 
       {isAddToPlaylistOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsAddToPlaylistOpen(false)}>
+        <div className="fixed inset-0 z-[140] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsAddToPlaylistOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
             <h3 className="text-lg font-bold">Tambah ke Playlist</h3>
             
@@ -1623,7 +1848,7 @@ export default function Home() {
       )}
 
       {isCreatePlaylistOpen && (
-        <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
+        <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
             <h3 className="text-lg font-bold">Buat Playlist Baru</h3>
             <input 
@@ -1664,6 +1889,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* Bottom Navigation */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
         <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
