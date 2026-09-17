@@ -59,6 +59,9 @@ export default function Home() {
   const [isVerified, setIsVerified] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
+const [coverPicFile, setCoverPicFile] = useState<File | null>(null);
+const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Followers / Following Modals
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
