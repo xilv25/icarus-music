@@ -37,23 +37,42 @@ const chunkArray = (arr: any[], size: number) => {
 };
 
 export default function Home() {
+  // --- AUTH STATES ---
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authInput, setAuthInput] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // --- APP NAVIGATION & STATES ---
   const [activeTab, setActiveTab] = useState('home'); 
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [randomSongs, setRandomSongs] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(5);
 
+  // --- LIBRARY & PLAYLIST STATES ---
+  const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
+  const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
+  const [playlists, setPlaylists] = useState<{ id: string; name: string; songs: any[] }[]>([]);
+  const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
+
+  // Modal States
+  const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
+  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
+
+  // --- PLAYER STATES ---
   const playerRef = useRef<any>(null);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
-  
   const [currentQueue, setCurrentQueue] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isShuffle, setIsShuffle] = useState(false);
@@ -65,7 +84,6 @@ export default function Home() {
   const [playedProgress, setPlayedProgress] = useState(0); 
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
-
   const isSeekingRef = useRef(false);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
@@ -75,10 +93,23 @@ export default function Home() {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
+  // Load Initial LocalStorage Data
   useEffect(() => {
+    const userAuth = localStorage.getItem('icarus_logged_in');
+    if (userAuth === 'true') setIsLoggedIn(true);
+
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
-    loadHomepageData(savedHistory);
+
+    const savedLikes = JSON.parse(localStorage.getItem('icarus_liked_ids') || '[]');
+    setLikedSongIds(savedLikes);
+    const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
+    setLikedSongsList(savedLikedFull);
+
+    const savedPlaylists = JSON.parse(localStorage.getItem('icarus_playlists') || '[]');
+    setPlaylists(savedPlaylists);
+
+    loadHomepageData();
   }, []);
 
   useEffect(() => {
@@ -88,74 +119,150 @@ export default function Home() {
     }
   }, [toastMessage]);
 
+  // Lirik Fetcher
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
       setIsLoadingLyrics(true);
-      
       const fetchLyrics = async () => {
         try {
           const artist = currentTrack.artists?.[0]?.name || '';
-          const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').split(' - ')[0] || '';
-          
+          const title = currentTrack.title?.replace(/\s*\(.*?\)\s*/g, '').split(' - ')[0] || '';
           const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
           if (!res.ok) throw new Error('Not found');
-          
           const data = await res.json();
           setLyrics(data.lyrics);
-        } catch (error) {
+        } catch {
           setLyrics("Maaf, lirik tidak tersedia untuk lagu ini.");
         } finally {
           setIsLoadingLyrics(false);
         }
       };
-      
       fetchLyrics();
     }
   }, [currentTrack?.videoId]);
 
-  const lyricLines = lyrics ? lyrics.split('\n').filter(line => line.trim() !== '') : [];
+  const lyricLines = lyrics ? lyrics.split('\n').filter(l => l.trim() !== '') : [];
   const activeLineIndex = duration > 0 ? Math.min(Math.floor((playedSeconds / duration) * lyricLines.length), lyricLines.length - 1) : 0;
 
-  // Logika Autoscroll yang disempurnakan (Tepat di tengah kotak)
   useEffect(() => {
     if (!isLyricsExpanded && activeLyricRef.current && lyricContainerRef.current) {
       const container = lyricContainerRef.current;
       const activeEl = activeLyricRef.current;
-      
-      const containerHeight = container.clientHeight;
-      const activeTop = activeEl.offsetTop;
-      const activeHeight = activeEl.clientHeight;
-      
-      const targetScrollTop = activeTop - (containerHeight / 2) + (activeHeight / 2);
-      
-      container.scrollTo({
-        top: Math.max(0, targetScrollTop),
-        behavior: 'smooth'
-      });
+      container.scrollTo({ top: activeEl.offsetTop - (container.clientHeight / 2), behavior: 'smooth' });
     }
   }, [activeLineIndex, isLyricsExpanded]);
 
-  const loadHomepageData = async (userHistory: any[]) => {
+  const loadHomepageData = async () => {
     setIsLoading(true);
     try {
       const res1 = await fetch(`/api/search?q=Global Viral Hits 2026`);
       const json1 = await res1.json();
-      if (json1.status === 'success') {
-        setSuggestions(json1.data.slice(0, 15)); 
-      }
+      if (json1.status === 'success') setSuggestions(json1.data.slice(0, 15));
 
       const res2 = await fetch(`/api/search?q=Trending Chill Mix`);
       const json2 = await res2.json();
-      if (json2.status === 'success') {
-        setRandomSongs(json2.data.slice(0, 15));
-      }
-    } catch (error) {
-      console.error("Gagal memuat homepage", error);
+      if (json2.status === 'success') setRandomSongs(json2.data.slice(0, 15));
+    } catch (e) {
+      console.error(e);
     }
     setIsLoading(false);
   };
 
+  // --- AUTH HANDLER ---
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    if (!authInput || !authPassword) {
+      setAuthError("Semua kolom harus diisi!");
+      return;
+    }
+
+    if (authMode === 'register') {
+      // Strong password validation: Min 8 chars, has number and letter
+      const strongRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
+      if (!strongRegex.test(authPassword)) {
+        setAuthError("Password harus minimal 8 karakter dan mengandung kombinasi huruf & angka.");
+        return;
+      }
+    }
+
+    // Success Auth Simulation
+    localStorage.setItem('icarus_logged_in', 'true');
+    setIsLoggedIn(true);
+    setToastMessage(authMode === 'login' ? "Berhasil masuk!" : "Akun berhasil dibuat & terdaftar!");
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('icarus_logged_in');
+    setIsLoggedIn(false);
+    setToastMessage("Berhasil keluar akun.");
+  };
+
+  // --- LIKED SONGS HANDLER ---
+  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const id = song.videoId;
+    let updatedIds = [...likedSongIds];
+    let updatedList = [...likedSongsList];
+
+    if (updatedIds.includes(id)) {
+      updatedIds = updatedIds.filter(i => i !== id);
+      updatedList = updatedList.filter(s => s.videoId !== id);
+      setToastMessage("Dihapus dari Liked Songs");
+    } else {
+      updatedIds.push(id);
+      updatedList.unshift(song);
+      setToastMessage("Ditambahkan ke Liked Songs");
+    }
+
+    setLikedSongIds(updatedIds);
+    setLikedSongsList(updatedList);
+    localStorage.setItem('icarus_liked_ids', JSON.stringify(updatedIds));
+    localStorage.setItem('icarus_liked_full', JSON.stringify(updatedList));
+  };
+
+  const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
+
+  // --- PLAYLIST HANDLER ---
+  const handleCreatePlaylist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim()) return;
+
+    const newPlaylist = {
+      id: Date.now().toString(),
+      name: newPlaylistName.trim(),
+      songs: []
+    };
+
+    const updated = [...playlists, newPlaylist];
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    setNewPlaylistName('');
+    setIsCreatePlaylistOpen(false);
+    setToastMessage("Playlist berhasil dibuat!");
+  };
+
+  const addSongToPlaylist = (playlistId: string) => {
+    if (!songToAddToPlaylist) return;
+    const updated = playlists.map(pl => {
+      if (pl.id === playlistId) {
+        if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+          return { ...pl, songs: [...pl.songs, songToAddToPlaylist] };
+        }
+      }
+      return pl;
+    });
+
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    setIsAddToPlaylistOpen(false);
+    setSongToAddToPlaylist(null);
+    setToastMessage("Lagu ditambahkan ke playlist!");
+  };
+
+  // --- PLAYER CONTROLS ---
   const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
     const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
@@ -180,12 +287,7 @@ export default function Home() {
       return;
     }
     if (currentQueue.length > 0) {
-      let nextIdx;
-      if (isShuffle) {
-        nextIdx = Math.floor(Math.random() * currentQueue.length);
-      } else {
-        nextIdx = (currentIndex + 1) % currentQueue.length;
-      }
+      let nextIdx = isShuffle ? Math.floor(Math.random() * currentQueue.length) : (currentIndex + 1) % currentQueue.length;
       playSong(currentQueue[nextIdx], currentQueue, nextIdx);
     }
   };
@@ -202,39 +304,16 @@ export default function Home() {
     if (currentTrack) setIsPlaying(!isPlaying);
   };
 
-  // Logika Seek yang disempurnakan
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration || !playerRef.current) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetSeconds = percentage * duration;
-    
     isSeekingRef.current = true;
     setPlayedProgress(percentage);
     setPlayedSeconds(targetSeconds);
-    
     playerRef.current.seekTo(targetSeconds, 'seconds');
-    
-    setTimeout(() => {
-      isSeekingRef.current = false;
-    }, 800);
-  };
-
-  const handleShare = () => {
-    const songUrl = `https://www.youtube.com/watch?v=${currentTrack?.videoId}`;
-    if (navigator.share) {
-      navigator.share({
-        title: currentTrack?.title,
-        text: `Dengarkan ${currentTrack?.title} di Icarus Music`,
-        url: songUrl,
-      }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(songUrl);
-      setToastMessage("Tautan lagu disalin!");
-    }
-    setIsMenuOpen(false);
+    setTimeout(() => { isSeekingRef.current = false; }, 800);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -245,15 +324,105 @@ export default function Home() {
       const res = await fetch(`/api/search?q=${searchQuery}`);
       const json = await res.json();
       if (json.status === 'success') setSearchResults(json.data);
-    } catch (error) {
-      console.error("Gagal mencari", error);
-    }
+    } catch (e) { console.error(e); }
     setIsLoading(false);
   };
 
   const suggestionColumns = chunkArray(suggestions, 5);
   const historyColumns = chunkArray(history, 5);
 
+  // --- LOGIN / REGISTER SCREEN RENDERING IF NOT LOGGED IN ---
+  if (!isLoggedIn) {
+    return (
+      <div className="bg-black min-h-screen text-white flex flex-col justify-center items-center p-6 font-sans">
+        <div className="w-full max-w-sm bg-[#121212] border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-extrabold tracking-tight mb-2">ICARUS</h1>
+            <p className="text-xs text-gray-400">Your Ultimate Vibe & Music Space</p>
+          </div>
+
+          <div className="flex bg-black/50 p-1 rounded-xl mb-6 border border-white/5">
+            <button 
+              onClick={() => { setAuthMode('login'); setAuthError(null); }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${authMode === 'login' ? 'bg-white text-black shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+              Masuk
+            </button>
+            <button 
+              onClick={() => { setAuthMode('register'); setAuthError(null); }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${authMode === 'register' ? 'bg-white text-black shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+              Daftar
+            </button>
+          </div>
+
+          {authError && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-xl mb-4 text-center">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Email atau Nomor Telepon</label>
+              <input 
+                type="text" 
+                value={authInput}
+                onChange={(e) => setAuthInput(e.target.value)}
+                placeholder="nama@email.com / 0812345..."
+                className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Password</label>
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="Minimal 8 karakter (huruf & angka)"
+                  className="w-full bg-[#1e1e1e] border border-white/10 rounded-xl px-4 py-3 pr-11 text-sm text-white focus:outline-none focus:border-white transition-colors"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  {showPassword ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="w-full mt-2 py-3.5 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-transform active:scale-[0.98]">
+              {authMode === 'login' ? 'Masuk' : 'Daftar Akun'}
+            </button>
+          </form>
+
+          <div className="relative flex py-4 items-center">
+            <div className="flex-grow border-t border-white/10"></div>
+            <span className="flex-shrink mx-4 text-gray-500 text-[10px] uppercase">Atau masuk dengan</span>
+            <div className="flex-grow border-t border-white/10"></div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => { setIsLoggedIn(true); setToastMessage("Berhasil masuk via Google!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
+               Google
+            </button>
+            <button onClick={() => { setIsLoggedIn(true); setToastMessage("Berhasil masuk via Facebook!"); }} className="flex items-center justify-center gap-2 py-2.5 bg-[#1e1e1e] border border-white/10 rounded-xl text-xs font-semibold hover:bg-[#282828] transition-colors">
+               Facebook
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MAIN APP RENDER ---
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
@@ -263,7 +432,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* PERBAIKAN 1: Player tidak disembunyikan total (display:none), melainkan dibuat transparan di luar layar agar tetap merespon perintah skip/seek */}
       {currentTrack && (
         <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
           <ReactPlayer
@@ -295,19 +463,15 @@ export default function Home() {
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center text-xs font-bold shadow-md">
             ME
           </div>
-          <button className="bg-white text-black px-4 py-1.5 rounded-full text-sm font-semibold transition hover:scale-105">
-            All
-          </button>
-          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">
-            Music
-          </button>
-          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">
-            Podcasts
-          </button>
+          <button className="bg-white text-black px-4 py-1.5 rounded-full text-sm font-semibold transition hover:scale-105">All</button>
+          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">Music</button>
+          <button className="bg-[#242424] text-white px-4 py-1.5 rounded-full text-sm font-semibold transition hover:bg-[#303030]">Podcasts</button>
         </div>
       )}
 
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
+        
+        {/* --- TAB: HOME --- */}
         {activeTab === 'home' && (
           <div className="flex flex-col gap-8 animate-fade-in">
             
@@ -330,16 +494,18 @@ export default function Home() {
               ) : (
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {suggestionColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
+                    /* KOTAK BLOK CARD KACA MEMBUNGKUS 5 LAGU SEKALIGUS */
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
+                        const liked = isSongLiked(song.videoId);
+
                         return (
-                          // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
                           <div 
                             key={songIdx} 
                             onClick={() => playSong(song, suggestions, globalIdx)} 
-                            className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm"
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
                               <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
@@ -351,16 +517,20 @@ export default function Home() {
                                  )}
                               </div>
                               <div className="flex flex-col overflow-hidden pr-2">
-                                <span className={`text-base font-medium truncate w-40 sm:w-48 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                <span className={`text-base font-medium truncate w-32 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
                                   {song.title}
                                 </span>
-                                <span className="text-sm text-gray-400 truncate w-40 sm:w-48">
-                                  {artistName}
-                                </span>
+                                <span className="text-sm text-gray-400 truncate w-32">{artistName}</span>
                               </div>
                             </div>
-                            <div className="flex items-center text-gray-400 px-1">
-                               <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                            <div className="flex items-center gap-2">
+                              <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
+                                {liked ? (
+                                  <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                ) : (
+                                  <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                                )}
+                              </button>
                             </div>
                           </div>
                         );
@@ -378,26 +548,23 @@ export default function Home() {
                 </div>
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {historyColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start">
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[270px] max-w-[280px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                         return (
-                          // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
                           <div 
                             key={songIdx} 
                             onClick={() => playSong(song, history, globalIdx)} 
-                            className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm"
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
                               <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
                                  {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
                               </div>
                               <div className="flex flex-col overflow-hidden pr-2">
-                                <span className="text-base font-medium text-white truncate w-40 sm:w-48">{song.title}</span>
-                                <span className="text-sm text-gray-400 truncate w-40 sm:w-48">
-                                  {artistName}
-                                </span>
+                                <span className="text-base font-medium text-white truncate w-36">{song.title}</span>
+                                <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
                           </div>
@@ -409,47 +576,10 @@ export default function Home() {
               </section>
             )}
 
-            {randomSongs.length > 0 && (
-              <section className="mt-2">
-                <h2 className="text-xl font-bold tracking-tight mb-4">Recommended For You</h2>
-                <div className="flex flex-col gap-2">
-                  {randomSongs.slice(0, visibleHistoryCount).map((song, idx) => (
-                    // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
-                    <div key={idx} onClick={() => playSong(song, randomSongs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden shadow-inner">
-                           {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
-                        </div>
-                        <div className="flex flex-col overflow-hidden">
-                          <span className="text-base font-medium text-white truncate">{song.title}</span>
-                          <span className="text-sm text-gray-400 truncate">
-                            {song.artists?.map((a: any) => a.name).join(', ')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-gray-400 px-2">
-                         <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {visibleHistoryCount < randomSongs.length && (
-                  <div className="mt-4 text-center">
-                    <button 
-                      onClick={() => setVisibleHistoryCount(prev => Math.min(prev + 5, randomSongs.length))}
-                      className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white py-2 px-6 bg-white/10 hover:bg-white/20 rounded-full transition-colors shadow"
-                    >
-                      Show more
-                    </button>
-                  </div>
-                )}
-              </section>
-            )}
-
           </div>
         )}
 
+        {/* --- TAB: SEARCH --- */}
         {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
@@ -471,7 +601,6 @@ export default function Home() {
                   <div className="text-center text-gray-400 mt-10">Searching...</div>
                ) : searchResults.length > 0 ? (
                  searchResults.map((song, idx) => (
-                   // PERBAIKAN 3: Efek Kaca / Glassmorphism pada Card
                    <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-14 h-14 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden shadow-inner">
@@ -479,24 +608,147 @@ export default function Home() {
                         </div>
                         <div className="flex flex-col overflow-hidden">
                           <span className="text-base font-semibold text-white truncate">{song.title}</span>
-                          <span className="text-sm text-gray-400 truncate">
-                            Track • {song.artists?.map((a: any) => a.name).join(', ')}
-                          </span>
+                          <span className="text-sm text-gray-400 truncate">Track • {song.artists?.map((a: any) => a.name).join(', ')}</span>
                         </div>
                       </div>
-                      <div className="flex items-center px-2 text-gray-400">
-                         <svg className="w-5 h-5 hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => toggleLikeSong(song, e)} className="p-2">
+                          {isSongLiked(song.videoId) ? (
+                            <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                          )}
+                        </button>
                       </div>
                    </div>
                  ))
                ) : (
-                  <div className="text-center text-gray-500 mt-10">Search your favorite track or artist</div>
+                  <div className="text-center text-gray-500 mt-10">Cari lagu atau artis favoritmu</div>
                )}
             </div>
           </div>
         )}
+
+        {/* --- TAB:LIBRARY --- */}
+        {activeTab === 'library' && (
+          <div className="animate-fade-in pt-4">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold">Your Library</h1>
+              <button 
+                onClick={() => setIsCreatePlaylistOpen(true)}
+                className="bg-white text-black font-semibold text-xs px-4 py-2 rounded-full hover:bg-gray-200 transition-colors shadow"
+              >
+                + Buat Playlist
+              </button>
+            </div>
+
+            {activePlaylistView ? (
+              <div className="flex flex-col gap-4">
+                <button onClick={() => setActivePlaylistView(null)} className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1">
+                  ← Kembali ke Library
+                </button>
+                <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2">
+                  <h2 className="text-2xl font-black mb-1">{activePlaylistView.name}</h2>
+                  <p className="text-xs text-gray-400">{activePlaylistView.songs.length} lagu di dalam playlist ini</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {activePlaylistView.songs.length > 0 ? (
+                    activePlaylistView.songs.map((song: any, idx: number) => (
+                      <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden">
+                            {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
+                          </div>
+                          <div className="flex flex-col overflow-hidden">
+                            <span className="text-sm font-semibold truncate">{song.title}</span>
+                            <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-500 py-10 text-sm">Playlist ini masih kosong. Tambahkan lagu dari menu titik tiga lagu!</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {/* Liked Songs Folder Card */}
+                <div 
+                  onClick={() => setActivePlaylistView({ name: 'Liked Songs', songs: likedSongsList })}
+                  className="bg-gradient-to-r from-purple-900/60 to-indigo-900/40 border border-white/10 p-4 rounded-2xl flex items-center justify-between cursor-pointer hover:scale-[1.01] transition-transform shadow-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center">
+                      <svg className="w-7 h-7 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-white">Liked Songs</h3>
+                      <p className="text-xs text-gray-300">{likedSongsList.length} lagu disukai</p>
+                    </div>
+                  </div>
+                  <span className="text-gray-400 text-sm font-bold">→</span>
+                </div>
+
+                {/* User Playlists */}
+                <div className="flex flex-col gap-3 mt-2">
+                  <h3 className="text-sm font-bold tracking-wider text-gray-400 uppercase">Playlist Kamu</h3>
+                  {playlists.length > 0 ? (
+                    playlists.map((pl) => (
+                      <div 
+                        key={pl.id} 
+                        onClick={() => setActivePlaylistView(pl)}
+                        className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center font-bold text-lg text-gray-400">
+                            {pl.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-white">{pl.name}</h4>
+                            <p className="text-xs text-gray-400">{pl.songs.length} lagu</p>
+                          </div>
+                        </div>
+                        <span className="text-gray-400">→</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">Belum ada playlist kustom. Klik tombol "Buat Playlist" di atas.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- TAB: PROFILE --- */}
+        {activeTab === 'profile' && (
+          <div className="animate-fade-in pt-6 flex flex-col items-center">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-gray-700 to-gray-400 flex items-center justify-center text-2xl font-bold mb-4 shadow-xl">
+              ME
+            </div>
+            <h2 className="text-2xl font-bold mb-1">User Icarus</h2>
+            <p className="text-xs text-gray-400 mb-8">{authInput || 'user@icarus.music'}</p>
+
+            <div className="w-full max-w-sm flex flex-col gap-3">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center">
+                <span className="text-sm font-medium">Status Akun</span>
+                <span className="text-xs text-green-400 font-bold bg-green-500/10 px-2.5 py-1 rounded-full">Premium Active</span>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="w-full py-3.5 bg-red-600/20 border border-red-500/30 text-red-400 font-bold rounded-xl hover:bg-red-600 hover:text-white transition-colors"
+              >
+                Keluar Akun (Logout)
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
 
+      {/* MINI PLAYER */}
       {currentTrack && !isPlayerOpen && (
         <div 
           onClick={() => setIsPlayerOpen(true)}
@@ -512,9 +764,14 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4 px-2 text-white">
-            <svg className="w-5 h-5 hidden sm:block hover:text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v12H4V6zm2 2v8h12V8H6z"/></svg>
-            <svg className="w-5 h-5 hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+          <div className="flex items-center gap-3 px-2 text-white">
+            <button onClick={(e) => toggleLikeSong(currentTrack, e)} className="p-1">
+              {isSongLiked(currentTrack.videoId) ? (
+                <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+              ) : (
+                <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+              )}
+            </button>
             <div onClick={togglePlay} className="p-2 cursor-pointer">
               {isBuffering ? (
                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -556,37 +813,28 @@ export default function Home() {
             <div className="px-8 mt-2 flex flex-col items-center">
               <div className="w-full aspect-square bg-gray-900 shadow-2xl mb-10 overflow-hidden rounded-md">
                 {currentTrack.thumbnails?.[0]?.url && (
-                  <img 
-                    src={getHighResCover(currentTrack.thumbnails[currentTrack.thumbnails.length - 1].url)} 
-                    alt="cover" 
-                    className="w-full h-full object-cover" 
-                  />
+                  <img src={getHighResCover(currentTrack.thumbnails[currentTrack.thumbnails.length - 1].url)} alt="cover" className="w-full h-full object-cover" />
                 )}
               </div>
 
               <div className="w-full flex justify-between items-center mb-8">
                 <div className="overflow-hidden mr-4">
                   <h2 className="text-2xl font-bold truncate text-white mb-1">{currentTrack.title}</h2>
-                  <p className="text-gray-400 text-lg truncate">
-                    {currentTrack.artists?.map((a: any) => a.name).join(', ')}
-                  </p>
+                  <p className="text-gray-400 text-lg truncate">{currentTrack.artists?.map((a: any) => a.name).join(', ')}</p>
                 </div>
-                <button>
-                  <svg className="w-7 h-7 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                <button onClick={(e) => toggleLikeSong(currentTrack, e)}>
+                  {isSongLiked(currentTrack.videoId) ? (
+                    <svg className="w-7 h-7 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  ) : (
+                    <svg className="w-7 h-7 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                  )}
                 </button>
               </div>
 
               <div className="w-full mb-6">
-                <div 
-                  onClick={handleSeek} 
-                  className="py-2 cursor-pointer group" // Memperlebar area klik agar lebih mudah digeser
-                >
+                <div onClick={handleSeek} className="py-2 cursor-pointer group">
                   <div className="h-[6px] bg-gray-600 rounded-full w-full relative">
                     <div className="h-full bg-white rounded-full absolute top-0 left-0 pointer-events-none" style={{ width: `${playedProgress * 100}%` }}></div>
-                    <div 
-                       className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none" 
-                       style={{ left: `calc(${playedProgress * 100}% - 7px)` }}
-                    ></div>
                   </div>
                 </div>
                 <div className="flex justify-between text-[11px] font-semibold text-gray-400 mt-1">
@@ -596,18 +844,12 @@ export default function Home() {
               </div>
 
               <div className="w-full flex items-center justify-between mb-10 px-2">
-                <button 
-                  onClick={() => setIsShuffle(!isShuffle)} 
-                  className={`transition-colors ${isShuffle ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
-                  title="Shuffle"
-                >
+                <button onClick={() => setIsShuffle(!isShuffle)} className={`transition-colors ${isShuffle ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}>
                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                 </button>
-                
-                <button onClick={handlePrev} className="text-white hover:text-gray-300 transition-colors">
+                <button onClick={handlePrev} className="text-white hover:text-gray-300">
                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                 </button>
-
                 <button onClick={togglePlay} className="w-16 h-16 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
                   {isBuffering ? (
                     <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
@@ -617,72 +859,39 @@ export default function Home() {
                     <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                   )}
                 </button>
-
-                <button onClick={handleNext} className="text-white hover:text-gray-300 transition-colors">
+                <button onClick={handleNext} className="text-white hover:text-gray-300">
                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
                 </button>
-
-                <button 
-                  onClick={() => setIsRepeat(isRepeat === 'off' ? 'all' : isRepeat === 'all' ? 'one' : 'off')} 
-                  className={`relative transition-colors ${isRepeat !== 'off' ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}
-                  title={`Repeat: ${isRepeat}`}
-                >
+                <button onClick={() => setIsRepeat(isRepeat === 'off' ? 'all' : isRepeat === 'all' ? 'one' : 'off')} className={`transition-colors ${isRepeat !== 'off' ? 'text-white font-bold' : 'text-gray-400 hover:text-white'}`}>
                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                   {isRepeat === 'one' && (
-                     <span className="absolute -top-1 -right-1 text-[9px] bg-white text-black font-extrabold rounded-full w-3.5 h-3.5 flex items-center justify-center">1</span>
-                   )}
                 </button>
               </div>
             </div>
 
+            {/* Lyrics Section */}
             <div className="px-6 mt-4 pb-12">
               <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
-                
                 <div className="flex justify-between items-center mb-6 sticky top-0 bg-inherit pt-1 pb-3 border-b border-white/10 z-10">
                   <h3 className="text-sm font-bold tracking-wide">Lyrics</h3>
-                  <button 
-                    onClick={() => setIsLyricsExpanded(!isLyricsExpanded)}
-                    className="bg-black/60 p-2 rounded-full hover:bg-black transition-colors"
-                  >
-                    {isLyricsExpanded ? (
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-                    )}
+                  <button onClick={() => setIsLyricsExpanded(!isLyricsExpanded)} className="bg-black/60 p-2 rounded-full hover:bg-black transition-colors">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
                   </button>
                 </div>
-                
-                {/* PERBAIKAN 2: Penambahan relative pada container & padding py-[120px] agar lirik awal/akhir bisa persis ke tengah */}
                 <div ref={lyricContainerRef} className={`relative overflow-y-auto scrollbar-none ${isLyricsExpanded ? 'flex-1 py-4 text-2xl md:text-3xl' : 'max-h-[260px] pr-2'}`}>
                   <div className="py-[120px] flex flex-col gap-4 text-xl font-bold">
                     {isLoadingLyrics ? (
-                      <div className="flex flex-col gap-4 animate-pulse">
-                        <div className="h-5 bg-gray-800 rounded w-3/4"></div>
-                        <div className="h-5 bg-gray-800 rounded w-1/2"></div>
-                        <div className="h-5 bg-gray-800 rounded w-5/6"></div>
-                        <div className="h-5 bg-gray-800 rounded w-2/3 mt-4"></div>
-                      </div>
+                      <div className="text-gray-500 animate-pulse">Memuat lirik...</div>
                     ) : lyricLines.length > 0 ? (
                       lyricLines.map((line, idx) => {
                         const isActive = idx === activeLineIndex;
                         return (
-                          <div 
-                            key={idx}
-                            ref={isActive ? activeLyricRef : null}
-                            className={`transition-all duration-300 leading-relaxed ${
-                              isActive 
-                                ? 'text-white text-2xl md:text-3xl font-extrabold scale-[1.02] origin-left drop-shadow-lg' 
-                                : 'text-gray-500 text-lg md:text-xl font-medium opacity-60'
-                            }`}
-                          >
+                          <div key={idx} ref={isActive ? activeLyricRef : null} className={`transition-all duration-300 ${isActive ? 'text-white text-2xl md:text-3xl font-extrabold' : 'text-gray-500 text-lg opacity-60'}`}>
                             {line}
                           </div>
                         );
                       })
                     ) : (
-                      <p className="text-gray-500 font-normal italic text-base text-center">
-                        Lirik lagu tidak ditemukan di database publik.
-                      </p>
+                      <p className="text-gray-500 italic text-base text-center">Lirik tidak tersedia.</p>
                     )}
                   </div>
                 </div>
@@ -692,6 +901,7 @@ export default function Home() {
         )}
       </div>
 
+      {/* THREE DOTS MENU MODAL */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
           <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -699,7 +909,7 @@ export default function Home() {
             
             <div className="flex items-center gap-3 pb-4 border-b border-white/10">
               <div className="w-12 h-12 bg-black rounded overflow-hidden flex-shrink-0">
-                {currentTrack?.thumbnails?.[0]?.url && <img src={currentTrack.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
+                {currentTrack?.thumbnails?.[0]?.url && <img src={currentTrack.thumbnails[0].url} className="w-full h-full object-cover" />}
               </div>
               <div className="flex flex-col overflow-hidden">
                 <span className="font-bold text-white text-base truncate">{currentTrack?.title}</span>
@@ -707,19 +917,60 @@ export default function Home() {
               </div>
             </div>
 
-            <button onClick={handleShare} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
-              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-              <span>Bagikan (Share)</span>
-            </button>
-
-            <button onClick={() => { setToastMessage("Ditambahkan ke antrean!"); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+            <button onClick={() => { setSongToAddToPlaylist(currentTrack); setIsAddToPlaylistOpen(true); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
               <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              <span>Tambahkan ke Antrean</span>
+              <span>Tambahkan ke Playlist...</span>
             </button>
 
-            <button onClick={() => setIsMenuOpen(false)} className="mt-2 w-full py-3 bg-[#333333] hover:bg-[#444444] rounded-full font-semibold text-center text-white transition-colors">
-              Tutup
+            <button onClick={() => { toggleLikeSong(currentTrack); setIsMenuOpen(false); }} className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+              <span>{isSongLiked(currentTrack?.videoId) ? 'Hapus dari Liked Songs' : 'Sukai Lagu Ini (Like)'}</span>
             </button>
+
+            <button onClick={() => setIsMenuOpen(false)} className="mt-2 w-full py-3 bg-[#333] rounded-full font-semibold text-center text-white">Tutup</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE PLAYLIST */}
+      {isCreatePlaylistOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
+          <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
+            <h3 className="text-lg font-bold">Buat Playlist Baru</h3>
+            <input 
+              type="text" 
+              value={newPlaylistName}
+              onChange={(e) => setNewPlaylistName(e.target.value)}
+              placeholder="Nama playlist (mis: Lagu Galau 2026)"
+              className="w-full bg-[#2a2a2a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-2">
+              <button type="button" onClick={() => setIsCreatePlaylistOpen(false)} className="flex-1 py-3 bg-[#2a2a2a] text-gray-300 font-semibold rounded-xl text-xs">Batal</button>
+              <button type="submit" className="flex-1 py-3 bg-white text-black font-bold rounded-xl text-xs">Simpan</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: ADD SONG TO PLAYLIST SELECTION */}
+      {isAddToPlaylistOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsAddToPlaylistOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
+            <h3 className="text-lg font-bold">Pilih Playlist</h3>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+              {playlists.length > 0 ? (
+                playlists.map((pl) => (
+                  <div key={pl.id} onClick={() => addSongToPlaylist(pl.id)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer flex justify-between items-center text-sm font-medium">
+                    <span>{pl.name}</span>
+                    <span className="text-xs text-gray-400">{pl.songs.length} lagu</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-6">Belum ada playlist. Buat terlebih dahulu di menu Library.</p>
+              )}
+            </div>
+            <button onClick={() => setIsAddToPlaylistOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] text-gray-300 font-semibold rounded-xl text-xs mt-2">Tutup</button>
           </div>
         </div>
       )}
@@ -736,16 +987,16 @@ export default function Home() {
           <span className="text-[10px] font-medium">Search</span>
         </div>
 
-        <div className="flex flex-col items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-200 transition-colors">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h13.4a.5.5 0 0 1 .49.6l-1 5.2a.5.5 0 0 1-.49.4h-1.4"></path><path d="M4 19a2 2 0 0 0 2 2h14"></path><path d="M4 19h14"></path><path d="M8 12h8"></path><path d="M8 16h6"></path></svg>
+        <div onClick={() => setActiveTab('library')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'library' ? "3" : "2"} viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h13.4a.5.5 0 0 1 .49.6l-1 5.2a.5.5 0 0 1-.49.4h-1.4"></path><path d="M4 19a2 2 0 0 0 2 2h14"></path><path d="M4 19h14"></path><path d="M8 12h8"></path><path d="M8 16h6"></path></svg>
           <span className="text-[10px] font-medium">Library</span>
         </div>
 
-        <div className="flex flex-col items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-200 transition-colors">
+        <div onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
           <span className="text-[10px] font-medium">Profile</span>
         </div>
       </div>
     </div>
   );
-}
+                  }
