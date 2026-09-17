@@ -45,16 +45,15 @@ export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // --- USER PROFILE STATES ---
+  // --- USER PROFILE STATES (DB Integrated, Default 0) ---
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState('');
   const [coverPic, setCoverPic] = useState('');
   const [isVerified, setIsVerified] = useState(false);
-  const [followersCount, setFollowersCount] = useState(1280);
-  const [followingCount, setFollowingCount] = useState(342);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   
-  // Toggle Edit Profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempUsername, setTempUsername] = useState('');
   const [tempProfilePic, setTempProfilePic] = useState('');
@@ -74,15 +73,17 @@ export default function Home() {
   const [isFullScreenSearch, setIsFullScreenSearch] = useState(false);
   const [trendSongs, setTrendSongs] = useState<any[]>([]);
 
-  // --- LIBRARY & PLAYLIST STATES ---
+  // --- LIBRARY & PLAYLIST STATES (With Delete & Collaborative) ---
   const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
   const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
-  const [playlists, setPlaylists] = useState<{ id: string; name: string; songs: any[] }[]>([]);
+  const [playlists, setPlaylists] = useState<{ id: string; name: string; songs: any[]; isCollaborative?: boolean; collaborator?: string; addedBy?: { [songId: string]: string } }[]>([]);
   const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
 
   // Modal States
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isCollaborativePlaylist, setIsCollaborativePlaylist] = useState(false);
+  const [collaboratorEmail, setCollaboratorEmail] = useState('');
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
   const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
 
@@ -112,7 +113,6 @@ export default function Home() {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
-  // Load Initial LocalStorage & Supabase Data
   useEffect(() => {
     const userAuth = localStorage.getItem('icarus_logged_in');
     if (userAuth === 'true') setIsLoggedIn(true);
@@ -132,12 +132,6 @@ export default function Home() {
     setCoverPic(savedCover);
     setTempCoverPic(savedCover);
 
-    const savedFollowers = parseInt(localStorage.getItem('icarus_followers') || '1280');
-    setFollowersCount(savedFollowers);
-
-    const savedFollowing = parseInt(localStorage.getItem('icarus_following') || '342');
-    setFollowingCount(savedFollowing);
-
     const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
     setHistory(savedHistory);
 
@@ -152,7 +146,7 @@ export default function Home() {
     loadHomepageData();
   }, []);
 
-  // Fetch Verification & User Profile from Supabase / Real Database File or Fallback
+  // Supabase Data & Real Followers/Following Integration
   useEffect(() => {
     const fetchSupabaseProfile = async () => {
       if (!userEmail) return;
@@ -166,19 +160,17 @@ export default function Home() {
         if (data) {
           if (data.is_verified || data.verified || data.verification) {
             setIsVerified(true);
-            localStorage.setItem('icarus_is_verified', 'true');
           }
           if (data.username) {
             setUsername(data.username);
             setTempUsername(data.username);
           }
-          if (data.followers !== undefined) setFollowersCount(data.followers);
-          if (data.following !== undefined) setFollowingCount(data.following);
+          // Real database stats integration
+          setFollowersCount(data.followers !== undefined ? data.followers : 0);
+          setFollowingCount(data.following !== undefined ? data.following : 0);
         }
       } catch (err) {
-        // Fallback check localstorage if supabase query fails or table doesn't exist yet
-        const savedVerified = localStorage.getItem('icarus_is_verified') === 'true';
-        setIsVerified(savedVerified);
+        console.error("Supabase profile sync error:", err);
       }
     };
     fetchSupabaseProfile();
@@ -191,7 +183,6 @@ export default function Home() {
     }
   }, [toastMessage]);
 
-  // Lirik Fetcher
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
@@ -245,7 +236,6 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // --- HELPER: CONVERT DEVICE FILE TO BASE64 ---
   const handleDeviceFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -257,7 +247,6 @@ export default function Home() {
     }
   };
 
-  // --- HELPER: RENDER PROFILE AVATAR WITH VERIFIED RING ---
   const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold") => {
     return (
       <div className="relative inline-block flex-shrink-0">
@@ -281,7 +270,6 @@ export default function Home() {
     );
   };
 
-  // --- AUTH HANDLER ---
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -335,7 +323,6 @@ export default function Home() {
     setToastMessage("Profil berhasil diperbarui!");
   };
 
-  // --- LIKED SONGS HANDLER ---
   const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const id = song.videoId;
@@ -360,7 +347,7 @@ export default function Home() {
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
-  // --- PLAYLIST HANDLER ---
+  // --- PLAYLIST HANDLERS (With Delete & Collaborative Contributors) ---
   const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlaylistName.trim()) return;
@@ -368,25 +355,42 @@ export default function Home() {
     const newPlaylist = {
       id: Date.now().toString(),
       name: newPlaylistName.trim(),
-      songs: songToAddToPlaylist ? [songToAddToPlaylist] : []
+      isCollaborative: isCollaborativePlaylist,
+      collaborator: isCollaborativePlaylist ? collaboratorEmail : '',
+      songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
+      addedBy: songToAddToPlaylist ? { [songToAddToPlaylist.videoId]: username || userEmail } : {}
     };
 
     const updated = [...playlists, newPlaylist];
     setPlaylists(updated);
     localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     setNewPlaylistName('');
+    setIsCollaborativePlaylist(false);
+    setCollaboratorEmail('');
     setIsCreatePlaylistOpen(false);
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
     setToastMessage("Playlist baru dibuat & lagu otomatis dimasukkan!");
   };
 
+  const deletePlaylist = (playlistId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const updated = playlists.filter(pl => pl.id !== playlistId);
+    setPlaylists(updated);
+    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
+    setToastMessage("Playlist berhasil dihapus.");
+  };
+
   const addSongToPlaylist = (playlistId: string) => {
     if (!songToAddToPlaylist) return;
+    const currentUserTag = username || userEmail || 'Anda';
     const updated = playlists.map(pl => {
       if (pl.id === playlistId) {
         if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
-          return { ...pl, songs: [...pl.songs, songToAddToPlaylist] };
+          const newSongs = [...pl.songs, songToAddToPlaylist];
+          const newAddedBy = { ...(pl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+          return { ...pl, songs: newSongs, addedBy: newAddedBy };
         }
       }
       return pl;
@@ -399,7 +403,21 @@ export default function Home() {
     setToastMessage("Lagu ditambahkan ke playlist!");
   };
 
-  // --- PLAYER CONTROLS ---
+  // Calculate contributor percentage for collaborative playlists
+  const getContributorStats = (playlist: any) => {
+    if (!playlist.songs || playlist.songs.length === 0) return [];
+    const counts: { [key: string]: number } = {};
+    const total = playlist.songs.length;
+    playlist.songs.forEach((song: any) => {
+      const u = playlist.addedBy?.[song.videoId] || 'Owner';
+      counts[u] = (counts[u] || 0) + 1;
+    });
+    return Object.keys(counts).map(user => ({
+      user,
+      percentage: Math.round((counts[user] / total) * 100)
+    }));
+  };
+
   const playSong = (song: any, queue: any[] = [], index: number = 0) => {
     setCurrentTrack(song);
     const activeQueue = queue.length > 0 ? queue : (suggestions.length > 0 ? suggestions : [song]);
@@ -465,19 +483,16 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // Filtered lists for Home All / Music / Podcasts
   const displayedSuggestions = suggestions.filter((song: any) => {
     const title = (song.title || '').toLowerCase();
     const isPodcast = title.includes('podcast') || title.includes('talk') || title.includes('episode') || title.includes('interview');
     if (homeSubTab === 'music') return !isPodcast;
     if (homeSubTab === 'podcast') return isPodcast;
-    return true; // 'all'
+    return true;
   });
 
   const suggestionColumns = chunkArray(displayedSuggestions, 5);
-  const historyColumns = chunkArray(history, 5);
 
-  // --- LOGIN / REGISTER SCREEN RENDERING IF NOT LOGGED IN ---
   if (!isLoggedIn) {
     return (
       <div className="bg-black min-h-screen text-white flex flex-col justify-center items-center p-6 font-sans">
@@ -568,7 +583,6 @@ export default function Home() {
     );
   }
 
-  // --- MAIN APP RENDER ---
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
@@ -604,7 +618,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* UPDATE 4: HOME PAGE TOP TABS */}
       {activeTab === 'home' && (
         <div className="sticky top-0 bg-black/90 backdrop-blur-md z-40 px-4 py-4 flex gap-3 items-center">
           <div onClick={() => setActiveTab('profile')} className="cursor-pointer">
@@ -643,7 +656,6 @@ export default function Home() {
                   <p className="text-xs text-gray-400 mb-0.5">Jump into a session based on your tastes</p>
                   <h2 className="text-2xl font-bold tracking-tight">Start listening</h2>
                 </div>
-                {/* UPDATE 5: Show all menjadi tulisan bisa diklik, membuka halaman search blok hitam satu layar */}
                 <button 
                   onClick={() => setIsFullScreenSearch(true)}
                   className="text-xs font-semibold text-gray-400 hover:text-white transition-colors uppercase tracking-wider"
@@ -655,10 +667,10 @@ export default function Home() {
               {isLoading ? (
                 <div className="text-sm text-gray-500 animate-pulse">Curating your mix...</div>
               ) : (
-                /* UPDATE 1: Card Carousel agak diperbesar dikit buat masukin titik tiga di sebelah kanan tombol love */
+                /* UPDATE 2: Carousel sedikit diperlebar tapi tidak sampai mentok kanan */
                 <div className="flex overflow-x-auto gap-4 pb-2 snap-x scrollbar-none pr-12">
                   {suggestionColumns.map((column, colIdx) => (
-                    <div key={colIdx} className="flex flex-col gap-2 min-w-[290px] max-w-[300px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3.5 shadow-lg">
+                    <div key={colIdx} className="flex flex-col gap-2 min-w-[330px] max-w-[350px] flex-shrink-0 snap-start bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3.5 shadow-lg">
                       {column.map((song: any, songIdx: number) => {
                         const globalIdx = colIdx * 5 + songIdx;
                         const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
@@ -680,14 +692,13 @@ export default function Home() {
                                  )}
                               </div>
                               <div className="flex flex-col overflow-hidden pr-2">
-                                <span className={`text-base font-medium truncate w-32 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                <span className={`text-base font-medium truncate w-36 ${currentTrack?.videoId === song.videoId ? 'text-green-400 font-bold' : 'text-white'}`}>
                                   {song.title}
                                 </span>
-                                <span className="text-sm text-gray-400 truncate w-32">{artistName}</span>
+                                <span className="text-sm text-gray-400 truncate w-36">{artistName}</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              {/* Tombol Like */}
                               <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
                                 {liked ? (
                                   <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -695,7 +706,6 @@ export default function Home() {
                                   <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                                 )}
                               </button>
-                              {/* UPDATE 1: Titik tiga di sebelah kanan tombol love untuk share, add to playlist, dll */}
                               <button 
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
@@ -716,12 +726,12 @@ export default function Home() {
               )}
             </section>
 
-            {/* UPDATE 2: Dibawah carousel recently played, list lagu random dgn vibes yg user sering putar hilang. Harus ada list biasa tanpa carousel dengan 5 baris dan show more dibawahnya. */}
+            {/* UPDATE 1: Lagu satuan di luar carousel tanpa kotakan */}
             <section className="mt-2">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold tracking-tight">Vibes For You</h2>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                 {randomSongs.slice(0, randomSongsLimit).map((song: any, idx: number) => {
                   const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
                   const liked = isSongLiked(song.videoId);
@@ -729,7 +739,7 @@ export default function Home() {
                     <div 
                       key={idx} 
                       onClick={() => playSong(song, randomSongs, idx)}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer transition-all"
+                      className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer transition-all"
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative">
@@ -770,7 +780,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: SEARCH --- */}
+        {/* --- TAB: SEARCH (With Clear Button & History / Recommendations) --- */}
         {activeTab === 'search' && (
           <div className="animate-fade-in pt-4">
             <h1 className="text-3xl font-bold mb-4">Search</h1>
@@ -781,22 +791,40 @@ export default function Home() {
               <input 
                 type="text" 
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white text-black font-semibold px-10 py-3 rounded-md focus:outline-none placeholder-gray-500" 
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (!e.target.value.trim()) {
+                    setSearchResults([]);
+                  }
+                }}
+                className="w-full bg-white text-black font-semibold pl-10 pr-10 py-3 rounded-md focus:outline-none placeholder-gray-500" 
                 placeholder="What do you want to listen to?" 
               />
+              {/* UPDATE 3: Tombol silang untuk hapus cepat di searchbar */}
+              {searchQuery && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-black hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              )}
             </form>
 
-            {/* UPDATE 6: Halaman search saat diklik memunculkan list history pencarian user, 5 history, tulisan show more, dan sedikit lagu trend di bawahnya */}
-            {!searchQuery && searchResults.length === 0 ? (
+            {/* UPDATE 3: Saat input kosong / tombol silang ditekan, tampilkan search history max 5 + show more + rekomendasi lagu */}
+            {!searchQuery.trim() && searchResults.length === 0 ? (
               <div className="flex flex-col gap-6">
                 <div>
                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Recent History</h3>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
                     {history.slice(0, historyDisplayLimit).map((song: any, idx: number) => (
-                      <div key={idx} onClick={() => playSong(song, history, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                      <div key={idx} onClick={() => playSong(song, history, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer">
                         <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden">
+                          <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                             {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
                           </div>
                           <span className="text-sm font-medium text-white truncate">{song.title}</span>
@@ -816,12 +844,12 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Trending Picks</h3>
-                  <div className="flex flex-col gap-2">
-                    {trendSongs.slice(0, 3).map((song: any, idx: number) => (
-                      <div key={idx} onClick={() => playSong(song, trendSongs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Recommended For You</h3>
+                  <div className="flex flex-col gap-1">
+                    {trendSongs.slice(0, 5).map((song: any, idx: number) => (
+                      <div key={idx} onClick={() => playSong(song, trendSongs, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer">
                         <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden">
+                          <div className="w-10 h-10 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                             {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
                           </div>
                           <div className="flex flex-col overflow-hidden">
@@ -835,12 +863,12 @@ export default function Home() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                  {isLoading ? (
                     <div className="text-center text-gray-400 mt-10">Searching...</div>
                  ) : searchResults.length > 0 ? (
                    searchResults.map((song, idx) => (
-                     <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 cursor-pointer group transition-all shadow-sm">
+                     <div key={idx} onClick={() => playSong(song, searchResults, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer transition-all">
                         <div className="flex items-center gap-3 overflow-hidden">
                           <div className="w-14 h-14 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden shadow-inner">
                              {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />}
@@ -862,7 +890,7 @@ export default function Home() {
                      </div>
                    ))
                  ) : (
-                    <div className="text-center text-gray-500 mt-10">Cari lagu atau artis favoritmu</div>
+                    <div className="text-center text-gray-500 mt-10">Tidak ada hasil ditemukan</div>
                  )}
               </div>
             )}
@@ -887,28 +915,51 @@ export default function Home() {
                 <button onClick={() => setActivePlaylistView(null)} className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1">
                   ← Kembali ke Library
                 </button>
-                <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2">
-                  <h2 className="text-2xl font-black mb-1">{activePlaylistView.name}</h2>
-                  <p className="text-xs text-gray-400">{activePlaylistView.songs.length} lagu di dalam playlist ini</p>
+                <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2 flex justify-between items-end">
+                  <div>
+                    <h2 className="text-2xl font-black mb-1">{activePlaylistView.name}</h2>
+                    <p className="text-xs text-gray-400">{activePlaylistView.songs.length} lagu di dalam playlist ini</p>
+                    {activePlaylistView.isCollaborative && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        <span className="text-[11px] text-purple-400 font-bold">🤝 Collaborative Playlist (Shared with {activePlaylistView.collaborator || 'Friend'})</span>
+                        <div className="flex gap-2 text-[10px] text-gray-300">
+                          {getContributorStats(activePlaylistView).map((stat: any, sIdx: number) => (
+                            <span key={sIdx} className="bg-white/10 px-2 py-0.5 rounded">
+                              {stat.user}: {stat.percentage}%
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={(e) => deletePlaylist(activePlaylistView.id, e)}
+                    className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    Hapus Playlist
+                  </button>
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
                   {activePlaylistView.songs.length > 0 ? (
                     activePlaylistView.songs.map((song: any, idx: number) => (
-                      <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer">
+                      <div key={idx} onClick={() => playSong(song, activePlaylistView.songs, idx)} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer">
                         <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden">
+                          <div className="w-12 h-12 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                             {song.thumbnails?.[0]?.url && <img src={song.thumbnails[0].url} className="w-full h-full object-cover" />}
                           </div>
                           <div className="flex flex-col overflow-hidden">
                             <span className="text-sm font-semibold truncate">{song.title}</span>
-                            <span className="text-xs text-gray-400 truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                            <span className="text-xs text-gray-400 truncate">
+                              {song.artists?.map((a: any) => a.name).join(', ')} 
+                              {activePlaylistView.isCollaborative && activePlaylistView.addedBy?.[song.videoId] && ` • Ditambahkan oleh ${activePlaylistView.addedBy[song.videoId]}`}
+                            </span>
                           </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-center text-gray-500 py-10 text-sm">Playlist ini masih kosong. Tambahkan lagu dari menu titik tiga lagu!</p>
+                    <p className="text-center text-gray-500 py-10 text-sm">Playlist ini masih kosong.</p>
                   )}
                 </div>
               </div>
@@ -930,29 +981,36 @@ export default function Home() {
                   <span className="text-gray-400 text-sm font-bold">→</span>
                 </div>
 
-                <div className="flex flex-col gap-3 mt-2">
+                <div className="flex flex-col gap-2 mt-2">
                   <h3 className="text-sm font-bold tracking-wider text-gray-400 uppercase">Playlist Kamu</h3>
                   {playlists.length > 0 ? (
                     playlists.map((pl) => (
                       <div 
                         key={pl.id} 
-                        onClick={() => setActivePlaylistView(pl)}
-                        className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors"
+                        className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center font-bold text-lg text-gray-400">
+                        <div onClick={() => setActivePlaylistView(pl)} className="flex items-center gap-3 flex-1 cursor-pointer overflow-hidden">
+                          <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center font-bold text-lg text-gray-400 flex-shrink-0">
                             {pl.name.charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <h4 className="font-semibold text-white">{pl.name}</h4>
-                            <p className="text-xs text-gray-400">{pl.songs.length} lagu</p>
+                          <div className="overflow-hidden">
+                            <h4 className="font-semibold text-white truncate">{pl.name}</h4>
+                            <p className="text-xs text-gray-400 truncate">
+                              {pl.songs.length} lagu {pl.isCollaborative && '• 🤝 Collaborative'}
+                            </p>
                           </div>
                         </div>
-                        <span className="text-gray-400">→</span>
+                        <button 
+                          onClick={(e) => deletePlaylist(pl.id, e)}
+                          className="text-gray-500 hover:text-red-400 p-2"
+                          title="Hapus Playlist"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-gray-500 italic">Belum ada playlist kustom. Klik tombol "Buat Playlist" di atas.</p>
+                    <p className="text-xs text-gray-500 italic">Belum ada playlist kustom.</p>
                   )}
                 </div>
               </div>
@@ -960,7 +1018,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- TAB: PROFILE --- */}
+        {/* --- TAB: PROFILE (Real Database Followers & Following) --- */}
         {activeTab === 'profile' && (
           <div className="animate-fade-in pb-12">
             <div className="w-full px-3 pt-3">
@@ -1040,6 +1098,7 @@ export default function Home() {
                 </form>
               )}
 
+              {/* UPDATE 5: Followers & Following langsung dari Database (Real DB stats) */}
               <div className="grid grid-cols-4 gap-2 w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-3 mb-6 text-center shadow-lg">
                 <div className="flex flex-col">
                   <span className="text-base font-bold text-white">{likedSongsList.length}</span>
@@ -1085,7 +1144,6 @@ export default function Home() {
 
       </div>
 
-      {/* UPDATE 5: FULL SCREEN SEARCH BLOK HITAM SATU LAYAR (Termasuk menutupi tombol search dll) */}
       {isFullScreenSearch && (
         <div className="fixed inset-0 z-[110] bg-black text-white flex flex-col p-4 overflow-y-auto animate-fade-in">
           <div className="flex justify-between items-center mb-6">
@@ -1120,7 +1178,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* MINI PLAYER */}
       {currentTrack && !isPlayerOpen && (
         <div 
           onClick={() => setIsPlayerOpen(true)}
@@ -1161,7 +1218,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* FULL SCREEN PLAYER */}
       <div 
         className={`fixed inset-0 z-[60] bg-gradient-to-b from-[#2a2a2a] to-black text-white flex flex-col transition-transform duration-300 ease-in-out overflow-y-auto pb-8 ${
           isPlayerOpen ? 'translate-y-0' : 'translate-y-full'
@@ -1240,7 +1296,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Lyrics Section */}
             <div className="px-6 mt-4 pb-12">
               <div className={`bg-[#181818] rounded-xl p-6 shadow-2xl transition-all duration-300 ${isLyricsExpanded ? 'fixed inset-4 z-50 bg-[#121212] flex flex-col' : 'min-h-[320px] max-h-[380px] overflow-hidden relative'}`}>
                 <div className="flex justify-between items-center mb-6 sticky top-0 bg-inherit pt-1 pb-3 border-b border-white/10 z-10">
@@ -1273,7 +1328,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* THREE DOTS MENU MODAL */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end justify-center animate-fade-in" onClick={() => setIsMenuOpen(false)}>
           <div className="bg-[#242424] w-full max-w-md rounded-t-2xl p-6 flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -1304,7 +1358,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* UPDATE 3: MODAL ADD TO PLAYLIST TANPA HARUS MEMBUAT PLAYLIST DULU (Ada tombol create a playlist & lagu otomatis masuk) */}
       {isAddToPlaylistOpen && (
         <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsAddToPlaylistOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
@@ -1327,7 +1380,7 @@ export default function Home() {
               {playlists.length > 0 ? (
                 playlists.map((pl) => (
                   <div key={pl.id} onClick={() => addSongToPlaylist(pl.id)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer flex justify-between items-center text-sm font-medium">
-                    <span>{pl.name}</span>
+                    <span>{pl.name} {pl.isCollaborative && '🤝'}</span>
                     <span className="text-xs text-gray-400">{pl.songs.length} lagu</span>
                   </div>
                 ))
@@ -1340,7 +1393,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL: CREATE PLAYLIST */}
+      {/* UPDATE 4: Modal Buat Playlist (Termasuk Opsi Playlist Bersama / Collaborative) */}
       {isCreatePlaylistOpen && (
         <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCreatePlaylistOpen(false)}>
           <form onSubmit={handleCreatePlaylist} onClick={(e) => e.stopPropagation()} className="bg-[#1c1c1c] border border-white/10 w-full max-w-sm rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
@@ -1353,15 +1406,36 @@ export default function Home() {
               className="w-full bg-[#2a2a2a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white"
               autoFocus
             />
+
+            <div className="flex flex-col gap-2 bg-white/5 p-3 rounded-xl border border-white/10">
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={isCollaborativePlaylist}
+                  onChange={(e) => setIsCollaborativePlaylist(e.target.checked)}
+                  className="rounded bg-[#2a2a2a] border-white/20 text-white focus:ring-0"
+                />
+                <span>Playlist Bersama Teman (Collaborative)</span>
+              </label>
+              {isCollaborativePlaylist && (
+                <input 
+                  type="email" 
+                  value={collaboratorEmail}
+                  onChange={(e) => setCollaboratorEmail(e.target.value)}
+                  placeholder="Email teman kontributor..."
+                  className="w-full bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white mt-1"
+                />
+              )}
+            </div>
+
             <div className="flex gap-2 mt-2">
               <button type="button" onClick={() => setIsCreatePlaylistOpen(false)} className="flex-1 py-3 bg-[#2a2a2a] text-gray-300 font-semibold rounded-xl text-xs">Batal</button>
-              <button type="submit" className="flex-1 py-3 bg-white text-black font-bold rounded-xl text-xs">Simpan & Masukkan Lagu</button>
+              <button type="submit" className="flex-1 py-3 bg-white text-black font-bold rounded-xl text-xs">Simpan</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
         <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
           <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -1385,4 +1459,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
+      }
