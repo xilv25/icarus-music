@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@supabase/supabase-js';
 
-// Inisialisasi Supabase Client
+// Inisialisasi Supabase Client (Tanpa export agar tidak error di Next.js Page)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
 
@@ -477,4 +477,4 @@ export default function Home() {
       </div>
     </div>
   );
-}
+                                                                                                    }
