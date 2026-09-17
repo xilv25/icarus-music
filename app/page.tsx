@@ -501,30 +501,97 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
   return data.publicUrl;
 };
   
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUsername(tempUsername);
-    setProfilePic(tempProfilePic);
-    setCoverPic(tempCoverPic);
-    setBio(tempBio);
+   const handleSaveProfile = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (isSavingProfile) return;
+
+  const cleanUsername = tempUsername.trim();
+
+  if (!cleanUsername) {
+    setToastMessage('Username tidak boleh kosong.');
+    return;
+  }
+
+  setIsSavingProfile(true);
+
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) throw userError;
+
+    if (!user) {
+      setToastMessage('Session Supabase tidak ditemukan. Silakan login kembali.');
+      return;
+    }
+
+    let savedProfilePic = tempProfilePic;
+    let savedCoverPic = tempCoverPic;
+
+    if (profilePicFile) {
+      savedProfilePic = await uploadProfileImage(
+        profilePicFile,
+        user.id,
+        'avatar'
+      );
+    }
+
+    if (coverPicFile) {
+      savedCoverPic = await uploadProfileImage(
+        coverPicFile,
+        user.id,
+        'cover'
+      );
+    }
+
+    const profilePayload = {
+      id: user.id,
+      email: user.email || userEmail,
+      username: cleanUsername,
+      profile_pic: savedProfilePic || null,
+      cover_pic: savedCoverPic || null,
+      bio: tempBio.trim(),
+    };
+
+    const { data, error: profileError } = await supabase
+      .from('profiles')
+      .upsert(profilePayload, {
+        onConflict: 'id',
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    setUsername(data.username || '');
+    setProfilePic(data.profile_pic || '');
+    setCoverPic(data.cover_pic || '');
+    setBio(data.bio || '');
+
+    setTempUsername(data.username || '');
+    setTempProfilePic(data.profile_pic || '');
+    setTempCoverPic(data.cover_pic || '');
+    setTempBio(data.bio || '');
+
+    setProfilePicFile(null);
+    setCoverPicFile(null);
     setIsEditingProfile(false);
 
-    if (userEmail) {
-      const { error } = await supabase.from('profiles').update({
-        username: tempUsername,
-        profile_pic: tempProfilePic,
-        cover_pic: tempCoverPic,
-        bio: tempBio
-      }).eq('email', userEmail);
-
-      if (error) {
-        console.error("Gagal simpan ke Supabase:", error);
-        setToastMessage("Gagal memperbarui profil di cloud!");
-      } else {
-        setToastMessage("Profil berhasil diperbarui di Supabase database!");
-      }
-    }
-  };
+    setToastMessage('Profil berhasil disimpan ke Supabase.');
+  } catch (error: any) {
+    console.error('Gagal menyimpan profil:', error);
+    setToastMessage(
+      error?.message || 'Gagal menyimpan profil ke Supabase.'
+    );
+  } finally {
+    setIsSavingProfile(false);
+  }
+};
 
   const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
