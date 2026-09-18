@@ -98,21 +98,6 @@ const [playlists, setPlaylists] = useState<any[]>([]);
 const [activePlaylistView, setActivePlaylistView] = useState<any>(null);
 const [collabRequests, setCollabRequests] = useState<any[]>([]);
 
-// Handler untuk terima & tolak undangan
-const handleAcceptCollabRequest = (req: any) => {
-  setCollabRequests((prev) => prev.filter((r) => r.id !== req.id));
-  if (typeof setToastMessage === 'function') {
-    setToastMessage(`Berhasil bergabung ke playlist "${req.playlistName}"`);
-  }
-};
-
-const handleRejectCollabRequest = (req: any) => {
-  setCollabRequests((prev) => prev.filter((r) => r.id !== req.id));
-  if (typeof setToastMessage === 'function') {
-    setToastMessage(`Menolak undangan kolaborasi`);
-  }
-};
-
   // --- 5. MODAL STATES ---
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
@@ -279,9 +264,6 @@ const handleRejectCollabRequest = async (req: any) => {
     setLikedSongIds(savedLikes);
     const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
     setLikedSongsList(savedLikedFull);
-
-    const savedPlaylists = JSON.parse(localStorage.getItem('icarus_playlists') || '[]');
-    setPlaylists(savedPlaylists);
 
     loadHomepageData();
   }, []);
