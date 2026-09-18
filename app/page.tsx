@@ -990,27 +990,27 @@ export default function Home() {
         )}
 
         {/* --- TAB: LIBRARY --- */}
-        {activeTab === 'library' && (
-          <div className="space-y-6 mt-4 animate-fade-in">
-            {activePlaylistView ? (
-              <PlayListDetailView 
-                playlist={activePlaylistView}
-                onBack={() => setActivePlaylistView(null)}
-                onPlaySong={(song, idx) => playSong(song, activePlaylistView.songs, idx)}
-                onRemoveSong={(videoId) => removeSongFromPlaylist(activePlaylistView.id, videoId)}
-                onDeletePlaylist={() => deletePlaylist(activePlaylistView.id)}
-              />
-            ) : (
-              <>
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold">Koleksi Musikmu</h2>
-                  <button 
-                    onClick={() => setIsCreatePlaylistOpen(true)}
-                    className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors"
-                  >
-                    + Buat Playlist
-                  </button>
-                </div>
+{activeTab === 'library' && (
+  <div className="space-y-6 mt-4 animate-fade-in">
+    {activePlaylistView ? (
+      <PlayListDetailView 
+        playlist={activePlaylistView}
+        onBack={() => setActivePlaylistView(null)}
+        onPlaySong={(song: any, idx: number) => playSong(song, activePlaylistView.songs, idx)}
+        onRemoveSong={(videoId: string) => removeSongFromPlaylist(activePlaylistView.id, videoId)}
+        onDeletePlaylist={() => deletePlaylist(activePlaylistView.id)}
+      />
+    ) : (
+      <>
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold">Koleksi Musikmu</h2>
+          <button 
+            onClick={() => setIsCreatePlaylistOpen(true)}
+            className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors"
+          >
+            + Buat Playlist
+          </button>
+        </div>
 
                 {/* Liked Songs Entry */}
                 <div 
