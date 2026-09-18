@@ -116,11 +116,46 @@ export default function Home() {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
-  // --- INITIALIZATION & LOGIC HANDLERS (Auth, Supabase, Player, dll) ---
-  // (Fungsi-fungsi handler seperti playSong, handleSearch, toggleLikeSong, dll. diletakkan di sini 
-  // atau dibungkus menggunakan React Context agar kode page.tsx ini tetap ringkas dan elegan).
+  // --- INITIALIZATION & LOGIC HANDLERS (Auth Supabase) ---
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
 
-    // Jika belum login, tampilkan Komponen AuthForm
+    if (!authInput || !authPassword) {
+      setAuthError('Email dan password wajib diisi.');
+      return;
+    }
+
+    try {
+      if (authMode === 'login') {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authInput,
+          password: authPassword,
+        });
+        if (error) throw error;
+        if (data.user) {
+          setIsLoggedIn(true);
+          setUserId(data.user.id);
+          setUserEmail(data.user.email || '');
+          setToastMessage('Berhasil masuk!');
+        }
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email: authInput,
+          password: authPassword,
+        });
+        if (error) throw error;
+        if (data.user) {
+          setToastMessage('Registrasi berhasil! Silakan masuk.');
+          setAuthMode('login');
+        }
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Terjadi kesalahan pada autentikasi.');
+    }
+  };
+
+  // Jika belum login, tampilkan Komponen AuthForm
   if (!isLoggedIn) {
     return (
       <AuthForm 
@@ -133,7 +168,7 @@ export default function Home() {
         showPassword={showPassword}
         setShowPassword={setShowPassword}
         authError={authError}
-        handleAuthSubmit={handleAuthSubmit} // Pastikan fungsi submit ini sudah terdefinisi di page.tsx
+        handleAuthSubmit={handleAuthSubmit}
       />
     );
   }
@@ -167,7 +202,6 @@ export default function Home() {
               }
             }}
             onDuration={(dur) => setDuration(dur)}
-            // onEnded={handleNext}
             volume={1}
             width="100%"
             height="100%"
@@ -177,39 +211,70 @@ export default function Home() {
 
       {/* --- KONTEN UTAMA BERDASARKAN TAB AKTIF --- */}
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
+        <HomeHeader />
+        
         {activeTab === 'home' && (
-          <HomeTab 
-            // Teruskan props dan state yang dibutuhkan Home
-          />
-        )}
-
-        {activeTab === 'search' && (
-          <SearchTab 
-            // Teruskan props dan state pencarian
-          />
-        )}
-
-        {activeTab === 'library' && (
-          <LibraryTab 
-            // Teruskan props library & playlist
-          />
+          <div className="space-y-6 mt-4">
+            <SongListCarousel title="Trending Songs" songs={trendSongs} />
+            <SongListCarousel title="Rekomendasi Untukmu" songs={randomSongs} />
+          </div>
         )}
 
         {activeTab === 'profile' && (
-          <ProfileTab 
-            // Teruskan props profil & data Supabase
+          <ProfileView 
+            username={username}
+            bio={bio}
+            profilePic={profilePic}
+            coverPic={coverPic}
+            followersCount={followersCount}
+            followingCount={followingCount}
+            playlists={playlists}
           />
         )}
       </div>
 
       {/* --- MODAL-MODAL PENDUKUNG --- */}
-      {viewingProfileCard && <UserProfileCardModal />}
-      {isFollowersModalOpen && <FollowersModal />}
-      {isFollowingModalOpen && <FollowingModal />}
-      {isFullScreenSearch && <FullScreenSearchModal />}
-      {isMenuOpen && <SongMenuModal />}
-      {isAddToPlaylistOpen && <AddToPlaylistModal />}
-      {isCreatePlaylistOpen && <CreatePlaylistModal />}
+      {viewingProfileCard && <UserCardModal />}
+      
+      {isFollowersModalOpen && (
+        <FollowListModal 
+          isOpen={isFollowersModalOpen} 
+          onClose={() => setIsFollowersModalOpen(false)} 
+          title="Pengikut" 
+          users={followersList} 
+        />
+      )}
+
+      {isFollowingModalOpen && (
+        <FollowListModal 
+          isOpen={isFollowingModalOpen} 
+          onClose={() => setIsFollowingModalOpen(false)} 
+          title="Mengikuti" 
+          users={followingList} 
+        />
+      )}
+
+      {isMenuOpen && (
+        <SongMenuModal 
+          isOpen={isMenuOpen} 
+          onClose={() => setIsMenuOpen(false)} 
+          song={selectedSongForMenu} 
+        />
+      )}
+
+      <AddToPlayListModal 
+        isOpen={isAddToPlaylistOpen}
+        onClose={() => setIsAddToPlaylistOpen(false)}
+        playlists={playlists}
+        onSelectPlaylist={(playlistId) => {
+          setIsAddToPlaylistOpen(false);
+          setToastMessage('Lagu ditambahkan ke playlist!');
+        }}
+        onCreatePlaylistClick={() => {
+          setIsAddToPlaylistOpen(false);
+          setIsCreatePlaylistOpen(true);
+        }}
+      />
 
       {/* --- PLAYER & NAVIGASI BAWAH --- */}
       {currentTrack && !isPlayerOpen && <MiniPlayer />}
@@ -217,9 +282,12 @@ export default function Home() {
 
       {/* Bottom Navigation Bar */}
       <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
-        {/* Nav Button Home, Search, Library, Profile */}
+        <button onClick={() => setActiveTab('home')} className={`text-xs font-bold ${activeTab === 'home' ? 'text-white' : 'text-gray-400'}`}>Home</button>
+        <button onClick={() => setActiveTab('search')} className={`text-xs font-bold ${activeTab === 'search' ? 'text-white' : 'text-gray-400'}`}>Search</button>
+        <button onClick={() => setActiveTab('library')} className={`text-xs font-bold ${activeTab === 'library' ? 'text-white' : 'text-gray-400'}`}>Library</button>
+        <button onClick={() => setActiveTab('profile')} className={`text-xs font-bold ${activeTab === 'profile' ? 'text-white' : 'text-gray-400'}`}>Profile</button>
       </div>
     </div>
   );
-    }
-    
+         }
+  
