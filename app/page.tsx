@@ -883,6 +883,56 @@ console.log('followingId:', followingId);
 
   await fetchFollowData(followerId);
 };
+
+  const removeFollowerFromList = async (followerNumericId: string) => {
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from('follows')
+    .delete()
+    .eq('follower_id', String(followerNumericId))
+    .eq('following_id', String(userId));
+
+  if (error) {
+    console.error('Remove follower error:', error);
+    setToastMessage(`Gagal menghapus follower: ${error.message}`);
+    return;
+  }
+
+  setFollowersList(prev =>
+    prev.filter(
+      user => String(user.numeric_id) !== String(followerNumericId)
+    )
+  );
+
+  setFollowersCount(prev => Math.max(0, prev - 1));
+  setToastMessage('Follower berhasil dihapus.');
+};
+
+const unfollowFromList = async (followingNumericId: string) => {
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from('follows')
+    .delete()
+    .eq('follower_id', String(userId))
+    .eq('following_id', String(followingNumericId));
+
+  if (error) {
+    console.error('Unfollow from list error:', error);
+    setToastMessage(`Gagal unfollow: ${error.message}`);
+    return;
+  }
+
+  setFollowingList(prev =>
+    prev.filter(
+      user => String(user.numeric_id) !== String(followingNumericId)
+    )
+  );
+
+  setFollowingCount(prev => Math.max(0, prev - 1));
+  setToastMessage('Berhasil unfollow.');
+};
   // Helper render tombol Titik Tiga Modal pada lagu
   const renderSongMenuButton = (song: any, e?: React.MouseEvent) => {
     return (
