@@ -815,38 +815,71 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Follow / Unfollow logic with Supabase Database
   const toggleFollowUser = async () => {
-    if (!viewingProfileCard || !userId) return;
-    const targetNumericId = viewingProfileCard.numeric_id || viewingProfileCard.id;
+  if (!viewingProfileCard || !userId) {
+    setToastMessage('Data user belum siap.');
+    return;
+  }
 
-    if (isFollowingSelectedUser) {
-      // Unfollow
-      await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', userId)
-        .eq('following_id', targetNumericId);
+  // Gunakan numeric_id saja.
+  // Jangan gunakan fallback ke targetUser.id karena id adalah UUID.
+  const targetNumericId = viewingProfileCard.numeric_id;
 
-      setIsFollowingSelectedUser(false);
-      setViewingUserFollowers(prev => Math.max(0, prev - 1));
-      setToastMessage(`Berhasil Unfollow @${viewingProfileCard.username}`);
-    } else {
-      // Follow
-      await supabase
-        .from('follows')
-        .insert({
-          follower_id: userId,
-          following_id: targetNumericId
-        });
+  if (!targetNumericId) {
+    setToastMessage('User target belum memiliki numeric ID.');
+    return;
+  }
 
-      setIsFollowingSelectedUser(true);
-      setViewingUserFollowers(prev => prev + 1);
-      setToastMessage(`Berhasil Mengikuti @${viewingProfileCard.username}!`);
+  if (String(userId) === String(targetNumericId)) {
+    setToastMessage('Kamu tidak bisa follow diri sendiri.');
+    return;
+  }
+
+  const followerId = String(userId);
+  const followingId = String(targetNumericId);
+
+  if (isFollowingSelectedUser) {
+    const { error } = await supabase
+      .from('follows')
+      .delete()
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
+
+    if (error) {
+      console.error('Unfollow error:', error);
+      setToastMessage(`Gagal unfollow: ${error.message}`);
+      return;
     }
 
-    // Refresh own follow data
-    fetchFollowData(userId);
-  };
+    setIsFollowingSelectedUser(false);
+    setViewingUserFollowers(prev => Math.max(0, prev - 1));
+    setToastMessage(`Berhasil Unfollow @${viewingProfileCard.username}`);
+  } else {
+    const { error } = await supabase
+      .from('follows')
+      .insert({
+        follower_id: followerId,
+        following_id: followingId,
+      });
 
+    if (error) {
+      console.error('Follow error:', error);
+
+      if (error.code === '23505') {
+        setToastMessage('Kamu sudah mengikuti user ini.');
+      } else {
+        setToastMessage(`Gagal follow: ${error.message}`);
+      }
+
+      return;
+    }
+
+    setIsFollowingSelectedUser(true);
+    setViewingUserFollowers(prev => prev + 1);
+    setToastMessage(`Berhasil Mengikuti @${viewingProfileCard.username}!`);
+  }
+
+  await fetchFollowData(followerId);
+};
   // Helper render tombol Titik Tiga Modal pada lagu
   const renderSongMenuButton = (song: any, e?: React.MouseEvent) => {
     return (
