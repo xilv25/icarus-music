@@ -6,8 +6,9 @@ interface TrendingModalProps {
   isOpen: boolean;
   onClose: () => void;
   trendSongs: any[];
-  playSong: (song: any, queue: any[], index: number) => void;
-  renderSongMenuButton: (song: any) => React.ReactNode;
+  playSong?: (song: any, queue: any[], index: number) => void;
+  onPlaySong?: (song: any, index: number) => void;
+  renderSongMenuButton?: (song: any) => React.ReactNode;
 }
 
 export default function TrendingModal({
@@ -15,9 +16,19 @@ export default function TrendingModal({
   onClose,
   trendSongs,
   playSong,
+  onPlaySong,
   renderSongMenuButton,
 }: TrendingModalProps) {
   if (!isOpen) return null;
+
+  const handleSongClick = (song: any, idx: number) => {
+    if (onPlaySong) {
+      onPlaySong(song, idx);
+    } else if (playSong) {
+      playSong(song, trendSongs, idx);
+      onClose();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[110] bg-black text-white flex flex-col p-4 overflow-y-auto animate-fade-in">
@@ -38,10 +49,7 @@ export default function TrendingModal({
           trendSongs.map((song: any, idx: number) => (
             <div 
               key={song.videoId || idx} 
-              onClick={() => { 
-                playSong(song, trendSongs, idx); 
-                onClose(); 
-              }}
+              onClick={() => handleSongClick(song, idx)}
               className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer transition-all"
             >
               <div className="flex items-center gap-3 overflow-hidden">
@@ -61,7 +69,7 @@ export default function TrendingModal({
                   </span>
                 </div>
               </div>
-              {renderSongMenuButton(song)}
+              {renderSongMenuButton && renderSongMenuButton(song)}
             </div>
           ))
         ) : (
