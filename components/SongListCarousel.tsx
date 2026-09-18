@@ -13,13 +13,14 @@ interface SongListCarouselProps {
   subtitle?: string;
   songs: any[];
   onShowAll?: () => void;
-  currentTrack: any;
-  isPlaying: boolean;
-  playSong: (song: any, queue: any[], index: number) => void;
-  toggleLikeSong: (song: any, e?: React.MouseEvent) => void;
-  isSongLiked: (videoId: string) => boolean;
-  isSongPlayedBefore: (videoId: string) => boolean;
-  renderSongMenuButton: (song: any, e?: React.MouseEvent) => React.ReactNode;
+  onSongSelect?: (song: any, index: number) => void;
+  currentTrack?: any;
+  isPlaying?: boolean;
+  playSong?: (song: any, queue: any[], index: number) => void;
+  toggleLikeSong?: (song: any, e?: React.MouseEvent) => void;
+  isSongLiked?: (videoId: string) => boolean;
+  isSongPlayedBefore?: (videoId: string) => boolean;
+  renderSongMenuButton?: (song: any, e?: React.MouseEvent) => React.ReactNode;
   isRecentlyPlayed?: boolean;
 }
 
@@ -28,8 +29,9 @@ export default function SongListCarousel({
   subtitle,
   songs,
   onShowAll,
+  onSongSelect,
   currentTrack,
-  isPlaying,
+  isPlaying = false,
   playSong,
   toggleLikeSong,
   isSongLiked,
@@ -40,6 +42,14 @@ export default function SongListCarousel({
   const columns = chunkArray(songs, 5);
 
   if (!songs || songs.length === 0) return null;
+
+  const handleSongClick = (song: any, globalIdx: number) => {
+    if (onSongSelect) {
+      onSongSelect(song, globalIdx);
+    } else if (playSong) {
+      playSong(song, songs, globalIdx);
+    }
+  };
 
   return (
     <section className="mt-2">
@@ -67,14 +77,14 @@ export default function SongListCarousel({
             {column.map((song: any, songIdx: number) => {
               const globalIdx = colIdx * 5 + songIdx;
               const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
-              const liked = isSongLiked(song.videoId);
-              const playedBefore = isSongPlayedBefore(song.videoId);
+              const liked = isSongLiked ? isSongLiked(song.videoId) : false;
+              const playedBefore = isSongPlayedBefore ? isSongPlayedBefore(song.videoId) : false;
               const isCurrent = currentTrack?.videoId === song.videoId;
 
               return (
                 <div 
                   key={songIdx} 
-                  onClick={() => playSong(song, songs, globalIdx)} 
+                  onClick={() => handleSongClick(song, globalIdx)} 
                   className="flex items-center justify-between p-2 rounded-xl hover:bg-white/10 cursor-pointer group transition-all"
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
@@ -109,15 +119,17 @@ export default function SongListCarousel({
                         ✓
                       </span>
                     ) : (
-                      <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
-                        {liked ? (
-                          <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                        )}
-                      </button>
+                      toggleLikeSong && (
+                        <button onClick={(e) => toggleLikeSong(song, e)} className="p-1">
+                          {liked ? (
+                            <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                          )}
+                        </button>
+                      )
                     )}
-                    {renderSongMenuButton(song)}
+                    {renderSongMenuButton && renderSongMenuButton(song)}
                   </div>
                 </div>
               );
@@ -127,4 +139,4 @@ export default function SongListCarousel({
       </div>
     </section>
   );
-                                                             }
+}
