@@ -4,22 +4,20 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@supabase/supabase-js';
 
-// --- IMPORT 13 KOMPONEN MODULAR ANDA ---
-// Sesuaikan jalur (path) folder import ini dengan direktori komponen Anda (misal: '@/components/...')
-import AuthView from '@/components/AuthView';
-import HomeTab from '@/components/HomeTab';
-import SearchTab from '@/components/SearchTab';
-import LibraryTab from '@/components/LibraryTab';
-import ProfileTab from '@/components/ProfileTab';
-import MiniPlayer from '@/components/MiniPlayer';
+// --- IMPORT 13 KOMPONEN SESUAI NAMA FILE ASLI DI REPO ANDA ---
+import AddToPlayListModal from '@/components/AddToPlayListModal';
+import AuthForm from '@/components/AuthForm';
+import FollowListModal from '@/components/FollowListModal';
 import FullPlayer from '@/components/FullPlayer';
+import HomeHeader from '@/components/HomeHeader';
+import MiniPlayer from '@/components/MiniPlayer';
+import PlayListDetailView from '@/components/PlayListDetailView';
+import ProfileView from '@/components/ProfileView';
+import SongItem from '@/components/SongItem';
+import SongListCarousel from '@/components/SongListCarousel';
 import SongMenuModal from '@/components/SongMenuModal';
-import AddToPlaylistModal from '@/components/AddToPlaylistModal';
-import CreatePlaylistModal from '@/components/CreatePlaylistModal';
-import FollowersModal from '@/components/FollowersModal';
-import FollowingModal from '@/components/FollowingModal';
-import UserProfileCardModal from '@/components/UserProfileCardModal';
-import FullScreenSearchModal from '@/components/FullScreenSearchModal';
+import TrendingModal from '@/components/TrendingModal';
+import UserCardModal from '@/components/UserCardModal';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
