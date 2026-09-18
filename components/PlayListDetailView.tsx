@@ -6,8 +6,9 @@ interface PlaylistDetailViewProps {
   activePlaylistView?: any;
   playlist?: any;
   onBack: () => void;
-  onPlaySong?: (song: any, queue: any[], index: number) => void;
-  onRemoveSong?: (playlistId: string, videoId: string, e?: React.MouseEvent) => void;
+  onPlaySong?: ((song: any, index: number) => void) | ((song: any, queue: any[], index: number) => void) | any;
+  onRemoveSong?: (playlistIdOrVideoId: string, videoId?: string, e?: React.MouseEvent) => void;
+  onDeletePlaylist?: (playlistId?: string) => void;
   onToggleLike?: (song: any, e?: React.MouseEvent) => void;
   isSongLiked?: (videoId: string) => boolean;
   onOpenMenu?: (song: any, e?: React.MouseEvent) => void;
@@ -22,6 +23,7 @@ export default function PlayListDetailView({
   onBack,
   onPlaySong,
   onRemoveSong,
+  onDeletePlaylist,
   onToggleLike,
   isSongLiked,
   onOpenMenu,
@@ -50,14 +52,45 @@ export default function PlayListDetailView({
   const isLikedView = currentPlaylist?.isLikedSongs;
   const songsList = currentPlaylist?.songs || [];
 
+  const handlePlaySongClick = (song: any, idx: number) => {
+    if (!onPlaySong) return;
+    // Cek jumlah parameter yang diterima callback dari page.tsx
+    if (onPlaySong.length === 2) {
+      onPlaySong(song, idx);
+    } else {
+      onPlaySong(song, songsList, idx);
+    }
+  };
+
+  const handleRemoveSongClick = (videoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onRemoveSong) return;
+    if (onRemoveSong.length === 1) {
+      onRemoveSong(videoId);
+    } else {
+      onRemoveSong(currentPlaylist.id, videoId, e);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 animate-fade-in pb-20">
-      <button 
-        onClick={onBack} 
-        className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1 w-fit transition-colors"
-      >
-        ← Kembali ke Library
-      </button>
+      <div className="flex items-center justify-between">
+        <button 
+          onClick={onBack} 
+          className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1 w-fit transition-colors"
+        >
+          ← Kembali ke Library
+        </button>
+
+        {onDeletePlaylist && !isLikedView && (
+          <button
+            onClick={() => onDeletePlaylist(currentPlaylist.id)}
+            className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+          >
+            Hapus Playlist
+          </button>
+        )}
+      </div>
 
       {/* Header Banner */}
       <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2 flex flex-col justify-end gap-3 shadow-xl">
@@ -96,7 +129,7 @@ export default function PlayListDetailView({
             return (
               <div 
                 key={song.videoId || idx} 
-                onClick={() => onPlaySong && onPlaySong(song, songsList, idx)}
+                onClick={() => handlePlaySongClick(song, idx)}
                 className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 cursor-pointer transition-all group"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
@@ -146,10 +179,7 @@ export default function PlayListDetailView({
                   {!isLikedView && onRemoveSong && (
                     <button 
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveSong(currentPlaylist.id, song.videoId, e);
-                      }}
+                      onClick={(e) => handleRemoveSongClick(song.videoId, e)}
                       className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors"
                       title="Hapus dari playlist"
                     >
@@ -182,4 +212,4 @@ export default function PlayListDetailView({
       </div>
     </div>
   );
-}
+                      }
