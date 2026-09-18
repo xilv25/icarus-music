@@ -1756,20 +1756,36 @@ const unfollowFromList = async (followingNumericId: string) => {
             <h3 className="text-lg font-bold">Daftar Followers ({followersCount})</h3>
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
               {followersList.length > 0 ? (
-                followersList.map((usr: any) => (
-                  <div key={usr.id} className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
-                    <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
-                      {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
-                      <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-gray-400 text-center py-4">Belum ada followers.</p>
-              )}
+  followersList.map((usr: any) => (
+    <div
+      key={usr.id}
+      className="flex items-center justify-between gap-3 p-2 bg-white/5 rounded-xl"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
+          {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
+          <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          removeFollowerFromList(String(usr.numeric_id || usr.id));
+        }}
+        className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors"
+      >
+        Hapus
+      </button>
+    </div>
+  ))
+) : (
+  <p className="text-xs text-gray-400 text-center py-4">Belum ada followers.</p>
+)}
             </div>
             <button onClick={() => setIsFollowersModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
           </div>
@@ -1783,20 +1799,36 @@ const unfollowFromList = async (followingNumericId: string) => {
             <h3 className="text-lg font-bold">Daftar Following ({followingCount})</h3>
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
               {followingList.length > 0 ? (
-                followingList.map((usr: any) => (
-                  <div key={usr.id} className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
-                    <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
-                      {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
-                      <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-gray-400 text-center py-4">Anda belum mengikuti siapapun.</p>
-              )}
+  followingList.map((usr: any) => (
+    <div
+      key={usr.id}
+      className="flex items-center justify-between gap-3 p-2 bg-white/5 rounded-xl"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center font-bold text-xs">
+          {usr.profile_pic ? <img src={usr.profile_pic} className="w-full h-full object-cover" /> : usr.username?.[0]?.toUpperCase()}
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-white">@{usr.username}</h4>
+          <p className="text-[10px] font-mono text-gray-400">ID: {usr.numeric_id || usr.id}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          unfollowFromList(String(usr.numeric_id || usr.id));
+        }}
+        className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors"
+      >
+        Unfollow
+      </button>
+    </div>
+  ))
+) : (
+  <p className="text-xs text-gray-400 text-center py-4">Anda belum mengikuti siapapun.</p>
+)}
             </div>
             <button onClick={() => setIsFollowingModalOpen(false)} className="w-full py-2.5 bg-[#2a2a2a] rounded-xl text-xs font-semibold">Tutup</button>
           </div>
