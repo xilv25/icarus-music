@@ -70,7 +70,7 @@ export default function Home() {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
 
-  // --- 5. MODAL STATES ---
+    // --- 5. MODAL STATES ---
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
@@ -83,6 +83,7 @@ export default function Home() {
 
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
+  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null); // <--- TAMBAHKAN BARIS INI
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any | null>(null);
 
