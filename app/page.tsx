@@ -357,19 +357,20 @@ export default function Home() {
         )}
       </div>
 
-      {/* --- MODAL-MODAL PENDUKUNG --- */}
-      {viewingProfileCard && <UserCardModal />}
-      
-      {isFollowersModalOpen && (
-        <FollowListModal 
-          isOpen={isFollowersModalOpen} 
-          onClose={() => setIsFollowersModalOpen(false)} 
-          title="Pengikut" 
-          count={followersCount}
-          list={followersList} 
-          type="followers"
-          onAction={() => {}}
-          emptyText="Belum ada pengikut."
+            {/* --- MODAL-MODAL PENDUKUNG --- */}
+      {viewingProfileCard && (
+        <UserCardModal 
+          viewingProfileCard={viewingProfileCard}
+          onClose={() => setViewingProfileCard(null)}
+          renderAvatar={renderAvatar}
+          viewingUserPlaylistsCount={viewingUserPlaylistsCount}
+          viewingUserFollowers={viewingUserFollowers}
+          viewingUserFollowing={viewingUserFollowing}
+          isFollowingSelectedUser={isFollowingSelectedUser}
+          toggleFollowUser={() => {
+            // Tambahkan logika toggle follow di sini sesuai kebutuhan Anda
+            setIsFollowingSelectedUser(!isFollowingSelectedUser);
+          }}
         />
       )}
 
