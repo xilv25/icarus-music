@@ -1,0 +1,172 @@
+'use client';
+
+import React from 'react';
+
+interface PlaylistDetailViewProps {
+  activePlaylistView: any;
+  onBack: () => void;
+  onPlaySong: (song: any, queue: any[], index: number) => void;
+  onRemoveSong: (playlistId: string, videoId: string, e?: React.MouseEvent) => void;
+  onToggleLike: (song: any, e?: React.MouseEvent) => void;
+  isSongLiked: (videoId: string) => boolean;
+  onOpenMenu: (song: any, e?: React.MouseEvent) => void;
+  currentTrack: any;
+  isPlaying: boolean;
+  username: string;
+}
+
+export default function PlayListDetailView({
+  activePlaylistView,
+  onBack,
+  onPlaySong,
+  onRemoveSong,
+  onToggleLike,
+  isSongLiked,
+  onOpenMenu,
+  currentTrack,
+  isPlaying,
+  username,
+}: PlaylistDetailViewProps) {
+  
+  // Fungsi statistik kontributor kolaborasi
+  const getContributorStats = (playlist: any) => {
+    if (!playlist.songs || playlist.songs.length === 0) return [];
+    const counts: { [key: string]: number } = {};
+    const total = playlist.songs.length;
+    playlist.songs.forEach((song: any) => {
+      const u = playlist.addedBy?.[song.videoId] || username || 'Owner';
+      counts[u] = (counts[u] || 0) + 1;
+    });
+    return Object.keys(counts).map(user => ({
+      user,
+      percentage: Math.round((counts[user] / total) * 100),
+    }));
+  };
+
+  const isLikedView = activePlaylistView?.isLikedSongs;
+  const songsList = activePlaylistView?.songs || [];
+
+  return (
+    <div className="flex flex-col gap-4 animate-fade-in pb-20">
+      <button 
+        onClick={onBack} 
+        className="text-xs font-semibold text-gray-400 hover:text-white flex items-center gap-1 w-fit transition-colors"
+      >
+        ← Kembali ke Library
+      </button>
+
+      {/* Header Banner */}
+      <div className="bg-gradient-to-b from-gray-800 to-black p-6 rounded-2xl mb-2 flex flex-col justify-end gap-3 shadow-xl">
+        <div>
+          <span className="text-[10px] uppercase tracking-widest text-gray-400">
+            {isLikedView ? 'Playlist Spesial' : activePlaylistView.isCollaborative ? 'Collaborative Playlist' : 'Playlist Pribadi'}
+          </span>
+          <h2 className="text-3xl font-black mt-1 mb-1 text-white">{activePlaylistView.name}</h2>
+          <p className="text-xs text-gray-400">{songsList.length} lagu di dalam playlist ini</p>
+        </div>
+
+        {activePlaylistView.isCollaborative && (
+          <div className="flex flex-col gap-1.5 mt-2 bg-white/5 p-3 rounded-xl border border-white/10">
+            <span className="text-[11px] text-purple-400 font-bold flex items-center gap-1">
+              🤝 Collaborative Playlist (Shared with @{activePlaylistView.collaborator || 'Friend'})
+            </span>
+            <div className="flex flex-wrap gap-2 text-[10px] text-gray-300 mt-1">
+              {getContributorStats(activePlaylistView).map((stat: any, sIdx: number) => (
+                <span key={sIdx} className="bg-white/10 px-2.5 py-1 rounded-full border border-white/10 font-medium">
+                  {stat.user}: {stat.percentage}% kontribusi
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Songs List */}
+      <div className="flex flex-col gap-1">
+        {songsList.length > 0 ? (
+          songsList.map((song: any, idx: number) => {
+            const liked = isSongLiked(song.videoId);
+            const isCurrent = currentTrack?.videoId === song.videoId;
+            const addedByUser = activePlaylistView.addedBy?.[song.videoId];
+
+            return (
+              <div 
+                key={song.videoId || idx} 
+                onClick={() => onPlaySong(song, songsList, idx)}
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 cursor-pointer transition-all group"
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-12 h-12 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-inner">
+                    {song.thumbnails?.[0]?.url && (
+                      <img src={song.thumbnails[0].url} alt="" className="w-full h-full object-cover" />
+                    )}
+                    {isCurrent && isPlaying && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <span className={`text-sm font-semibold truncate ${isCurrent ? 'text-green-400 font-bold' : 'text-white'}`}>
+                      {song.title}
+                    </span>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span className="truncate">{song.artists?.map((a: any) => a.name).join(', ')}</span>
+                      {addedByUser && (
+                        <span className="text-[10px] text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded-md border border-purple-500/30">
+                          Ditambahkan oleh @{addedByUser}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={(e) => onToggleLike(song, e)} 
+                    className="p-1.5"
+                  >
+                    {liked ? (
+                      <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                    )}
+                  </button>
+
+                  {!isLikedView && (
+                    <button 
+                      type="button"
+                      onClick={(e) => onRemoveSong(activePlaylistView.id, song.videoId, e)}
+                      className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors"
+                      title="Hapus dari playlist"
+                    >
+                      Hapus
+                    </button>
+                  )}
+
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenMenu(song, e);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-white transition-colors"
+                    title="Opsi Lagu"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <p className="text-xs text-gray-400 text-center py-10">Playlist ini masih kosong.</p>
+        )}
+      </div>
+    </div>
+  );
+            }
+                      
