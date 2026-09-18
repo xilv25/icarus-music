@@ -999,6 +999,8 @@ export default function Home() {
         onPlaySong={(song: any, idx: number) => playSong(song, activePlaylistView.songs, idx)}
         onRemoveSong={(videoId: string) => removeSongFromPlaylist(activePlaylistView.id, videoId)}
         onDeletePlaylist={() => deletePlaylist(activePlaylistView.id)}
+        onToggleLike={(s: any) => toggleLikeSong(s)}
+        isSongLiked={(id: string) => isSongLiked(id)}
       />
     ) : (
       <>
@@ -1006,73 +1008,109 @@ export default function Home() {
           <h2 className="text-xl font-bold">Koleksi Musikmu</h2>
           <button 
             onClick={() => setIsCreatePlaylistOpen(true)}
-            className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors"
+            className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
           >
             + Buat Playlist
           </button>
         </div>
 
-                {/* Liked Songs Entry */}
-                <div 
-                  onClick={() => setActivePlaylistView({ id: 'liked', name: 'Liked Songs', songs: likedSongsList })}
-                  className="flex items-center gap-4 p-3 bg-gradient-to-r from-purple-900/40 to-white/5 border border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-colors"
-                >
-                  <div className="w-14 h-14 bg-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg">
-                    <svg className="w-7 h-7 fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                  </div>
+        {/* Notifikasi Undangan Kolaborasi (Friend Mutual Follow Required) */}
+        {collabRequests && collabRequests.length > 0 && (
+          <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
+            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+              Undangan Playlist Kolaborasi
+            </h3>
+            <div className="flex flex-col gap-2">
+              {collabRequests.map((req: any) => (
+                <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
                   <div className="flex flex-col">
-                    <span className="font-bold text-white text-base">Lagu yang Disukai</span>
-                    <span className="text-xs text-gray-400">{likedSongsList.length} lagu</span>
+                    <span className="text-xs text-white font-semibold">
+                      @{req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.playlistName}"</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleAcceptCollabRequest && handleAcceptCollabRequest(req)} 
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Setujui
+                    </button>
+                    <button 
+                      onClick={() => handleRejectCollabRequest && handleRejectCollabRequest(req)} 
+                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Tolak
+                    </button>
                   </div>
                 </div>
-
-                {/* Playlist Grid */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Playlist Saya</h3>
-                  {playlists.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {playlists.map((pl) => (
-                        <div 
-                          key={pl.id}
-                          onClick={() => setActivePlaylistView(pl)}
-                          className="bg-[#181818] border border-white/10 p-4 rounded-2xl cursor-pointer hover:bg-white/10 transition-colors flex flex-col justify-between h-32 relative group"
-                        >
-                          <div>
-                            <h4 className="font-bold text-white text-sm truncate">{pl.name} {pl.isCollaborative && '🤝'}</h4>
-                            <p className="text-[11px] text-gray-400 mt-1">{pl.songs?.length || 0} lagu</p>
-                          </div>
-                          <button 
-                            onClick={(e) => deletePlaylist(pl.id, e)}
-                            className="text-gray-500 hover:text-red-400 text-xs self-end"
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500 italic py-4">Belum ada playlist tersimpan.</p>
-                  )}
-                </div>
-
-                {/* Listening History */}
-                <div className="space-y-3 pt-4">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terakhir Diputar</h3>
-                  <div className="flex flex-col gap-2">
-                    {history.slice(0, historyDisplayLimit).map((song: any, idx: number) => (
-                      <SongItem 
-                        key={idx}
-                        song={song}
-                        onPlay={() => playSong(song, history, idx)}
-                        onMenuOpen={(s) => { setSelectedSongForMenu(s); setIsMenuOpen(true); }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Liked Songs Entry */}
+        <div 
+          onClick={() => setActivePlaylistView({ id: 'liked', name: 'Lagu yang Disukai', songs: likedSongsList, isLikedSongs: true })}
+          className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-900/40 to-white/5 border border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-colors"
+        >
+          <div className="w-14 h-14 bg-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg flex-shrink-0">
+            <svg className="w-7 h-7 fill-white" viewBox="0 0 24 24">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-white text-base">Lagu yang Disukai</span>
+            <span className="text-xs text-gray-400">{likedSongsList.length} lagu</span>
+          </div>
+        </div>
+
+        {/* Playlist List (Persegi Panjang Horizontal, Tanpa Panah) */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Playlist Kamu</h3>
+          {playlists.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {playlists.map((pl) => (
+                <div 
+                  key={pl.id}
+                  onClick={() => setActivePlaylistView(pl)}
+                  className="bg-[#181818] border border-white/10 p-4 rounded-2xl cursor-pointer hover:bg-white/10 transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gray-800 rounded-xl flex items-center justify-center text-white font-bold text-lg border border-white/5 flex-shrink-0">
+                      {pl.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                      <h4 className="font-bold text-white text-sm truncate">{pl.name} {pl.isCollaborative && '🤝'}</h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{pl.songs?.length || 0} lagu</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 italic py-4">Belum ada playlist tersimpan.</p>
+          )}
+        </div>
+
+        {/* Listening History */}
+        <div className="space-y-3 pt-4">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terakhir Diputar</h3>
+          <div className="flex flex-col gap-2">
+            {history.slice(0, historyDisplayLimit).map((song: any, idx: number) => (
+              <SongItem 
+                key={idx}
+                song={song}
+                onPlay={() => playSong(song, history, idx)}
+                onMenuOpen={(s) => { setSelectedSongForMenu(s); setIsMenuOpen(true); }}
+              />
+            ))}
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+)}
 
         {/* --- TAB: PROFILE --- */}
         {activeTab === 'profile' && (
