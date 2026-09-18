@@ -155,6 +155,82 @@ const handleRejectCollabRequest = (req: any) => {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
+    const fetchPlaylists = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('playlists')
+      .select('*')
+      .or(`user_id.eq.${user.id},collaborator_username.eq.${username}`);
+
+    if (!error && data) {
+      // Playlist utama kamu (milik sendiri & kolaborasi yang disetujui)
+      const myPlaylists = data.filter(
+        (pl) => pl.user_id === user.id || (pl.collaborator_username === username && pl.status === 'accepted')
+      );
+      setPlaylists(myPlaylists);
+
+      // Permintaan kolaborasi yang butuh persetujuan kamu (status: pending & kamu diajak)
+      const pendingRequests = data.filter(
+        (pl) => pl.collaborator_username === username && pl.status === 'pending'
+      );
+      setCollabRequests(pendingRequests);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlaylists();
+  }, [user, username]);
+
+  const handleCreatePlaylist = async () => {
+  if (!newPlaylistName.trim() || !user) return;
+
+  const newPl = {
+    user_id: user.id,
+    owner_username: username,
+    name: newPlaylistName,
+    songs: [],
+    is_collaborative: isCollaborativePlaylist,
+    collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
+    status: isCollaborativePlaylist ? 'pending' : 'accepted',
+  };
+
+  const { data, error } = await supabase.from('playlists').insert([newPl]).select().single();
+
+  if (!error && data) {
+    fetchPlaylists();
+    setIsCreatePlaylistOpen(false);
+    setNewPlaylistName('');
+    setCollaboratorUsername('');
+    setIsCollaborativePlaylist(false);
+    if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
+  }
+};
+
+  const handleAcceptCollabRequest = async (req: any) => {
+  const { error } = await supabase
+    .from('playlists')
+    .update({ status: 'accepted' })
+    .eq('id', req.id);
+
+  if (!error) {
+    fetchPlaylists();
+    if (setToastMessage) setToastMessage(`Berhasil bergabung ke playlist "${req.name || req.playlistName}"`);
+  }
+};
+
+const handleRejectCollabRequest = async (req: any) => {
+  const { error } = await supabase
+    .from('playlists')
+    .update({ status: 'rejected' })
+    .eq('id', req.id);
+
+  if (!error) {
+    fetchPlaylists();
+    if (setToastMessage) setToastMessage(`Menolak undangan kolaborasi`);
+  }
+};
+  
   // --- INITIALIZATION EFFECTS ---
   useEffect(() => {
     const initSession = async () => {
@@ -1011,6 +1087,7 @@ const handleRejectCollabRequest = (req: any) => {
     {activePlaylistView ? (
       <PlayListDetailView 
         playlist={activePlaylistView}
+        username={username}
         onBack={() => setActivePlaylistView(null)}
         onPlaySong={(song: any, idx: number) => playSong(song, activePlaylistView.songs, idx)}
         onRemoveSong={(videoId: string) => removeSongFromPlaylist(activePlaylistView.id, videoId)}
@@ -1021,7 +1098,7 @@ const handleRejectCollabRequest = (req: any) => {
     ) : (
       <>
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold">Koleksi Musikmu</h2>
+          <h2 className="text-xl font-bold text-white">Koleksi Musikmu</h2>
           <button 
             onClick={() => setIsCreatePlaylistOpen(true)}
             className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
@@ -1031,42 +1108,42 @@ const handleRejectCollabRequest = (req: any) => {
         </div>
 
         {/* Notifikasi Undangan Kolaborasi */}
-{collabRequests && collabRequests.length > 0 && (
-  <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
-    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-      <svg className="w-4 h-4 fill-purple-400" viewBox="0 0 24 24">
-        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
-      </svg>
-      Undangan Playlist Kolaborasi
-    </h3>
-    <div className="flex flex-col gap-2">
-      {collabRequests.map((req: any) => (
-        <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
-          <div className="flex flex-col">
-            <span className="text-xs text-white font-semibold">
-              @{req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.playlistName}"</span>
-            </span>
-            <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
+        {collabRequests && collabRequests.length > 0 && (
+          <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
+            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+              <svg className="w-4 h-4 fill-purple-400" viewBox="0 0 24 24">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+              </svg>
+              Undangan Playlist Kolaborasi
+            </h3>
+            <div className="flex flex-col gap-2">
+              {collabRequests.map((req: any) => (
+                <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-white font-semibold">
+                      @{req.owner_username || req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.name || req.playlistName}"</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleAcceptCollabRequest(req)} 
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Setujui
+                    </button>
+                    <button 
+                      onClick={() => handleRejectCollabRequest(req)} 
+                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Tolak
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => handleAcceptCollabRequest(req)} 
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
-            >
-              Setujui
-            </button>
-            <button 
-              onClick={() => handleRejectCollabRequest(req)} 
-              className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
-            >
-              Tolak
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+        )}
 
         {/* Liked Songs Entry */}
         <div 
@@ -1084,7 +1161,7 @@ const handleRejectCollabRequest = (req: any) => {
           </div>
         </div>
 
-        {/* Playlist List (Persegi Panjang Horizontal, Tanpa Panah & Tanpa Emoji) */}
+        {/* Playlist List */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Playlist Kamu</h3>
           {playlists.length > 0 ? (
@@ -1102,13 +1179,18 @@ const handleRejectCollabRequest = (req: any) => {
                     <div className="flex flex-col">
                       <div className="flex items-center gap-1.5">
                         <h4 className="font-bold text-white text-sm truncate">{pl.name}</h4>
-                        {pl.isCollaborative && (
+                        {(pl.is_collaborative || pl.isCollaborative) && (
                           <svg className="w-4 h-4 fill-purple-400 flex-shrink-0" viewBox="0 0 24 24">
                             <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
                           </svg>
                         )}
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{pl.songs?.length || 0} lagu</p>
+                      
+                      {pl.status === 'pending' ? (
+                        <p className="text-[11px] text-yellow-400 mt-0.5 font-medium">Menunggu persetujuan kolaborasi</p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400 mt-0.5">{pl.songs?.length || 0} lagu</p>
+                      )}
                     </div>
                   </div>
                 </div>
