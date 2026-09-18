@@ -5,12 +5,14 @@ import React from 'react';
 interface SongMenuModalProps {
   isOpen: boolean;
   onClose: () => void;
-  song: any;
-  currentTrack: any;
-  isLiked: boolean;
-  onToggleLike: (song: any) => void;
-  onOpenAddToPlaylist: (song: any) => void;
-  onShare: (song: any) => void;
+  song?: any;
+  currentTrack?: any;
+  isLiked?: boolean;
+  onToggleLike?: (song: any) => void;
+  onAddToPlaylist?: (song: any) => void;
+  onOpenAddToPlaylist?: (song: any) => void;
+  onShare?: (song: any) => void;
+  setToastMessage?: (msg: string) => void;
 }
 
 export default function SongMenuModal({
@@ -18,14 +20,29 @@ export default function SongMenuModal({
   onClose,
   song,
   currentTrack,
-  isLiked,
+  isLiked = false,
   onToggleLike,
+  onAddToPlaylist,
   onOpenAddToPlaylist,
   onShare,
+  setToastMessage,
 }: SongMenuModalProps) {
   if (!isOpen) return null;
 
   const targetSong = song || currentTrack;
+  const handleAddPlaylist = onAddToPlaylist || onOpenAddToPlaylist;
+
+  const handleShare = (s: any) => {
+    if (onShare) {
+      onShare(s);
+    } else if (s) {
+      const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?v=${s.videoId}` : '';
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareUrl);
+        if (setToastMessage) setToastMessage('Tautan berhasil disalin!');
+      }
+    }
+  };
 
   return (
     <div
@@ -61,52 +78,56 @@ export default function SongMenuModal({
         </div>
 
         {/* Opsi 1: Tambahkan ke Playlist */}
-        <button
-          onClick={() => onOpenAddToPlaylist(targetSong)}
-          className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors"
-        >
-          <svg
-            className="w-6 h-6 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        {handleAddPlaylist && (
+          <button
+            onClick={() => handleAddPlaylist(targetSong)}
+            className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>Tambahkan ke Playlist...</span>
-        </button>
+            <svg
+              className="w-6 h-6 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>Tambahkan ke Playlist...</span>
+          </button>
+        )}
 
         {/* Opsi 2: Like / Unlike */}
-        <button
-          onClick={() => onToggleLike(targetSong)}
-          className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors"
-        >
-          <svg
-            className="w-6 h-6 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        {onToggleLike && (
+          <button
+            onClick={() => onToggleLike(targetSong)}
+            className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
-          </svg>
-          <span>
-            {isLiked ? 'Hapus dari Liked Songs' : 'Sukai Lagu Ini (Like)'}
-          </span>
-        </button>
+            <svg
+              className="w-6 h-6 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+            <span>
+              {isLiked ? 'Hapus dari Liked Songs' : 'Sukai Lagu Ini (Like)'}
+            </span>
+          </button>
+        )}
 
         {/* Opsi 3: Bagikan (Share) */}
         <button
-          onClick={() => onShare(targetSong)}
+          onClick={() => handleShare(targetSong)}
           className="flex items-center gap-4 py-3 text-white font-medium hover:text-gray-300 transition-colors"
         >
           <svg
