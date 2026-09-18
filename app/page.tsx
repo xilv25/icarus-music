@@ -791,7 +791,7 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
   // Open User Profile Card & Load Statistics
   const openUserProfileCard = async (targetUser: any) => {
     setViewingProfileCard(targetUser);
-    const targetNumericId = targetUser.numeric_id || targetUser.id;
+    const targetNumericId = targetUser.numeric_id;
 
     // Check if following
     if (userId && targetNumericId) {
