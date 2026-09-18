@@ -120,10 +120,10 @@ export default function Home() {
   // (Fungsi-fungsi handler seperti playSong, handleSearch, toggleLikeSong, dll. diletakkan di sini 
   // atau dibungkus menggunakan React Context agar kode page.tsx ini tetap ringkas dan elegan).
 
-  // Jika belum login, tampilkan Komponen Auth
+    // Jika belum login, tampilkan Komponen AuthForm
   if (!isLoggedIn) {
     return (
-      <AuthView 
+      <AuthForm 
         authMode={authMode}
         setAuthMode={setAuthMode}
         authInput={authInput}
@@ -133,8 +133,7 @@ export default function Home() {
         showPassword={showPassword}
         setShowPassword={setShowPassword}
         authError={authError}
-        setAuthError={setAuthError}
-        // Kirim fungsi handleAuthSubmit di sini
+        handleAuthSubmit={handleAuthSubmit} // Pastikan fungsi submit ini sudah terdefinisi di page.tsx
       />
     );
   }
