@@ -1152,20 +1152,20 @@ export default function Home() {
       )}
 
       {isMenuOpen && (
-        <SongMenuModal 
-          isOpen={isMenuOpen}
-          onClose={() => setIsMenuOpen(false)}
-          song={selectedSongForMenu || currentTrack}
-          isLiked={isSongLiked((selectedSongForMenu || currentTrack)?.videoId)}
-          onToggleLike={(s) => toggleLikeSong(s)}
-          onAddToPlaylist={(s) => {
-            setSongToAddToPlaylist(s);
-            setIsAddToPlaylistOpen(true);
-            setIsMenuOpen(false);
-          }}
-          setToastMessage={setToastMessage}
-        />
-      )}
+  <SongMenuModal 
+    isOpen={isMenuOpen}
+    onClose={() => setIsMenuOpen(false)}
+    song={selectedSongForMenu || currentTrack}
+    isLiked={isSongLiked((selectedSongForMenu || currentTrack)?.videoId)}
+    onToggleLike={(s: any) => toggleLikeSong(s)}
+    onAddToPlaylist={(s: any) => {
+      setSongToAddToPlaylist(s);
+      setIsAddToPlaylistOpen(true);
+      setIsMenuOpen(false);
+    }}
+    setToastMessage={setToastMessage}
+  />
+)}
 
       <AddToPlayListModal 
         isOpen={isAddToPlaylistOpen}
