@@ -70,7 +70,7 @@ export default function Home() {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
 
-    // --- 5. MODAL STATES ---
+  // --- 5. MODAL STATES ---
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
@@ -83,7 +83,7 @@ export default function Home() {
 
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
-  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null); // <--- TAMBAHKAN BARIS INI
+  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any | null>(null);
 
@@ -100,13 +100,44 @@ export default function Home() {
   const [duration, setDuration] = useState(0);
   const isSeekingRef = useRef(false);
 
+  // --- EFFECT: FETCH USER & SONGS ---
+  useEffect(() => {
+    if (isLoggedIn && userId) {
+      const fetchProfile = async () => {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+          if (data) {
+            setUsername(data.username || '');
+            setProfilePic(data.avatar_url || '');
+            setBio(data.bio || 'Music lover & Vibe enthusiast.');
+          }
+        } catch (err) {
+          console.error('Error fetching profile:', err);
+        }
+      };
+      fetchProfile();
+    }
+
+    // Mengisi data lagu awal agar carousel tidak kosong
+    setTrendSongs([
+      { videoId: 'jfKfPfyJRdk', title: 'Lofi hip hop radio - beats to study/relax to', channelName: 'Lofi Girl' },
+      { videoId: '5qap5aO4i9A', title: 'lofi hip hop radio - beats to sleep/chill to', channelName: 'Lofi Girl' },
+    ]);
+    setRandomSongs([
+      { videoId: '4xDzrJKXOOY', title: 'Synthwave Radio - Chill synth / retro beats', channelName: 'Lofi Girl' },
+    ]);
+  }, [isLoggedIn, userId]);
+
   // --- HELPER FUNGSI PLAYER & INTERAKSI ---
   const playSong = (song: any, queue: any[], index: number) => {
     setCurrentTrack(song);
     setCurrentQueue(queue);
     setCurrentIndex(index);
     setIsPlaying(true);
-    // Masukkan ke history jika belum ada
     if (!history.some((h) => h.videoId === song.videoId)) {
       setHistory((prev) => [song, ...prev]);
     }
@@ -358,7 +389,7 @@ export default function Home() {
         )}
       </div>
 
-            {/* --- MODAL-MODAL PENDUKUNG --- */}
+      {/* --- MODAL-MODAL PENDUKUNG --- */}
       {viewingProfileCard && (
         <UserCardModal 
           viewingProfileCard={viewingProfileCard}
@@ -369,9 +400,21 @@ export default function Home() {
           viewingUserFollowing={viewingUserFollowing}
           isFollowingSelectedUser={isFollowingSelectedUser}
           toggleFollowUser={() => {
-            // Tambahkan logika toggle follow di sini sesuai kebutuhan Anda
             setIsFollowingSelectedUser(!isFollowingSelectedUser);
           }}
+        />
+      )}
+
+      {isFollowersModalOpen && (
+        <FollowListModal 
+          isOpen={isFollowersModalOpen} 
+          onClose={() => setIsFollowersModalOpen(false)} 
+          title="Pengikut" 
+          count={followersCount}
+          list={followersList} 
+          type="followers"
+          onAction={() => {}}
+          emptyText="Belum ada pengikut."
         />
       )}
 
@@ -447,5 +490,5 @@ export default function Home() {
       </div>
     </div>
   );
-        }
+          }
             
