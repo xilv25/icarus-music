@@ -40,9 +40,9 @@ export default function Page() {
   const [podcasts, setPodcasts] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
-  const [searchResults, setSearchResults] = useState([]);
-  const [queue, setQueue] = useState([]);
-  const [history, setHistory] = useState([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [queue, setQueue] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
 
   // Handler contoh pemutaran lagu
   const handlePlaySong = (song: any) => {
