@@ -835,7 +835,10 @@ const [isSavingProfile, setIsSavingProfile] = useState(false);
   }
 
   const followerId = String(userId);
-  const followingId = String(targetNumericId);
+const followingId = String(targetNumericId);
+
+console.log('followerId:', followerId);
+console.log('followingId:', followingId);
 
   if (isFollowingSelectedUser) {
     const { error } = await supabase
