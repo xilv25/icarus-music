@@ -10,9 +10,10 @@ interface SongItemProps {
   liked?: boolean;
   showLikeButton?: boolean;
   customIndicator?: React.ReactNode;
-  onPlay: () => void;
+  onPlay?: () => void;
   onToggleLike?: (e: React.MouseEvent) => void;
-  onOpenMenu: (e: React.MouseEvent) => void;
+  onOpenMenu?: (e: React.MouseEvent) => void;
+  onMenuOpen?: (song: any) => void;
   containerClassName?: string;
   imageSize?: string;
 }
@@ -28,11 +29,22 @@ export default function SongItem({
   onPlay,
   onToggleLike,
   onOpenMenu,
+  onMenuOpen,
   containerClassName = "hover:bg-white/10",
   imageSize = "w-12 h-12",
 }: SongItemProps) {
   const artistName = song.artists?.map((a: any) => a.name).join(', ') || '';
   const isActive = currentTrack?.videoId === song.videoId;
+
+  const handleMenuClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onMenuOpen) {
+      onMenuOpen(song);
+    }
+    if (onOpenMenu) {
+      onOpenMenu(e);
+    }
+  };
 
   return (
     <div 
@@ -71,7 +83,14 @@ export default function SongItem({
       {/* Bagian Kanan: Tombol Like & Tombol Menu Titik Tiga */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {showLikeButton && onToggleLike && (
-          <button onClick={onToggleLike} className="p-1" title={liked ? "Hapus dari Liked Songs" : "Sukai Lagu"}>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLike(e);
+            }} 
+            className="p-1" 
+            title={liked ? "Hapus dari Liked Songs" : "Sukai Lagu"}
+          >
             {liked ? (
               <svg className="w-5 h-5 text-white fill-white" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
             ) : (
@@ -80,15 +99,17 @@ export default function SongItem({
           </button>
         )}
         
-        <button 
-          onClick={onOpenMenu} 
-          className="p-1.5 text-gray-400 hover:text-white transition-colors"
-          title="Opsi Lagu"
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-          </svg>
-        </button>
+        {(onOpenMenu || onMenuOpen) && (
+          <button 
+            onClick={handleMenuClick} 
+            className="p-1.5 text-gray-400 hover:text-white transition-colors"
+            title="Opsi Lagu"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
