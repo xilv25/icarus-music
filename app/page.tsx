@@ -167,7 +167,9 @@ const [collabRequests, setCollabRequests] = useState<any[]>([]);
     fetchPlaylists();
   }, [user, username]);
 
-  const handleCreatePlaylist = async () => {
+  const handleCreatePlaylist = async (e?: React.FormEvent) => {
+  if (e) e.preventDefault(); // Mencegah reload/refresh halaman saat tombol submit ditekan
+
   if (!newPlaylistName.trim() || !user) return;
 
   const newPl = {
@@ -188,7 +190,7 @@ const [collabRequests, setCollabRequests] = useState<any[]>([]);
     setNewPlaylistName('');
     setCollaboratorUsername('');
     setIsCollaborativePlaylist(false);
-    if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
+    if (typeof setToastMessage === 'function') setToastMessage('Playlist berhasil dibuat!');
   }
 };
 
@@ -813,32 +815,6 @@ const handleRejectCollabRequest = async (req: any) => {
   };
 
   // --- PLAYLIST HANDLERS ---
-  const handleCreatePlaylist = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPlaylistName.trim()) return;
-
-    const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
-    const newPlaylist = {
-      id: Date.now().toString(),
-      name: newPlaylistName.trim(),
-      isCollaborative: isCollaborativePlaylist,
-      collaborator: isCollaborativePlaylist ? collaboratorUsername : '',
-      songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
-      addedBy: songToAddToPlaylist ? { [songToAddToPlaylist.videoId]: currentUserTag } : {}
-    };
-
-    const updated = [...playlists, newPlaylist];
-    setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
-    setNewPlaylistName('');
-    setIsCollaborativePlaylist(false);
-    setCollaboratorUsername('');
-    setIsCreatePlaylistOpen(false);
-    setIsAddToPlaylistOpen(false);
-    setSongToAddToPlaylist(null);
-    setToastMessage("Playlist baru dibuat & disimpan!");
-  };
-
   const deletePlaylist = (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const updated = playlists.filter(pl => pl.id !== playlistId);
