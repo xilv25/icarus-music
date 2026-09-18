@@ -141,17 +141,17 @@ const [collabRequests, setCollabRequests] = useState<any[]>([]);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
     const fetchPlaylists = async () => {
-    if (!user) return;
+    if (!userId) return;
 
     const { data, error } = await supabase
       .from('playlists')
       .select('*')
-      .or(`user_id.eq.${user.id},collaborator_username.eq.${username}`);
+      .or(`user_id.eq.${userId},collaborator_username.eq.${username}`);
 
     if (!error && data) {
       // Playlist utama kamu (milik sendiri & kolaborasi yang disetujui)
       const myPlaylists = data.filter(
-        (pl) => pl.user_id === user.id || (pl.collaborator_username === username && pl.status === 'accepted')
+        (pl) => pl.user_id === userId || (pl.collaborator_username === username && pl.status === 'accepted')
       );
       setPlaylists(myPlaylists);
 
@@ -165,34 +165,33 @@ const [collabRequests, setCollabRequests] = useState<any[]>([]);
 
   useEffect(() => {
     fetchPlaylists();
-  }, [user, username]);
+  }, [userId, username]);
 
-  const handleCreatePlaylist = async (e?: React.FormEvent) => {
-  if (e) e.preventDefault(); // Mencegah reload/refresh halaman saat tombol submit ditekan
+    const handleCreatePlaylist = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newPlaylistName.trim() || !userId) return; // <-- ganti !user jadi !userId
 
-  if (!newPlaylistName.trim() || !user) return;
+    const newPl = {
+      user_id: userId, // <-- ganti user.id jadi userId
+      owner_username: username,
+      name: newPlaylistName,
+      songs: [],
+      is_collaborative: isCollaborativePlaylist,
+      collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
+      status: isCollaborativePlaylist ? 'pending' : 'accepted',
+    };
 
-  const newPl = {
-    user_id: user.id,
-    owner_username: username,
-    name: newPlaylistName,
-    songs: [],
-    is_collaborative: isCollaborativePlaylist,
-    collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
-    status: isCollaborativePlaylist ? 'pending' : 'accepted',
+    const { data, error } = await supabase.from('playlists').insert([newPl]).select().single();
+
+    if (!error && data) {
+      fetchPlaylists();
+      setIsCreatePlaylistOpen(false);
+      setNewPlaylistName('');
+      setCollaboratorUsername('');
+      setIsCollaborativePlaylist(false);
+      if (typeof setToastMessage === 'function') setToastMessage('Playlist berhasil dibuat!');
+    }
   };
-
-  const { data, error } = await supabase.from('playlists').insert([newPl]).select().single();
-
-  if (!error && data) {
-    fetchPlaylists();
-    setIsCreatePlaylistOpen(false);
-    setNewPlaylistName('');
-    setCollaboratorUsername('');
-    setIsCollaborativePlaylist(false);
-    if (typeof setToastMessage === 'function') setToastMessage('Playlist berhasil dibuat!');
-  }
-};
 
   const handleAcceptCollabRequest = async (req: any) => {
   const { error } = await supabase
