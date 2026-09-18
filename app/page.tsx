@@ -92,12 +92,10 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // --- 4. LIBRARY & PLAYLIST STATES ---
-  const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
-  const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
-  const [playlists, setPlaylists] = useState<any[]>([]);
-  const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
-  const [collabRequests, setCollabRequests] = useState<any[]>([]);
-  const [activePlaylistView, setActivePlaylistView] = useState...
+const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
+const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
+const [playlists, setPlaylists] = useState<any[]>([]);
+const [activePlaylistView, setActivePlaylistView] = useState<any>(null);
 const [collabRequests, setCollabRequests] = useState<any[]>([]);
 
 // Handler untuk terima & tolak undangan
