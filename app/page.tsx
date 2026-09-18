@@ -116,7 +116,22 @@ export default function Home() {
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
-  // --- INITIALIZATION & LOGIC HANDLERS (Auth Supabase) ---
+  // --- HELPER RENDER AVATAR ---
+  const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
+    const pic = overridePic || profilePic;
+    const name = overrideUsername || username || 'User';
+    return (
+      <div className={`${customClass} rounded-full overflow-hidden bg-gray-700 flex items-center justify-center text-white flex-shrink-0 shadow`}>
+        {pic ? (
+          <img src={pic} alt={name} className="w-full h-full object-cover" />
+        ) : (
+          <span>{name?.[0]?.toUpperCase() || 'U'}</span>
+        )}
+      </div>
+    );
+  };
+
+  // --- HANDLER AUTH SUBMIT (SUPABASE) ---
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -152,6 +167,41 @@ export default function Home() {
       }
     } catch (err: any) {
       setAuthError(err.message || 'Terjadi kesalahan pada autentikasi.');
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
+    setToastMessage('Berhasil keluar.');
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    // Logika simpan profil bisa disesuaikan dengan database Supabase Anda
+    setUsername(tempUsername);
+    setBio(tempBio);
+    if (tempProfilePic) setProfilePic(tempProfilePic);
+    if (tempCoverPic) setCoverPic(tempCoverPic);
+    setIsEditingProfile(false);
+    setIsSavingProfile(false);
+    setToastMessage('Profil berhasil disimpan!');
+  };
+
+  const handleDeviceFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    previewSetter: (val: string) => void,
+    fileSetter: (file: File | null) => void
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      fileSetter(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        previewSetter(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -211,7 +261,13 @@ export default function Home() {
 
       {/* --- KONTEN UTAMA BERDASARKAN TAB AKTIF --- */}
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
-        <HomeHeader />
+        <HomeHeader 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          homeSubTab={homeSubTab}
+          setHomeSubTab={setHomeSubTab}
+          renderAvatar={renderAvatar}
+        />
         
         {activeTab === 'home' && (
           <div className="space-y-6 mt-4">
@@ -223,12 +279,35 @@ export default function Home() {
         {activeTab === 'profile' && (
           <ProfileView 
             username={username}
+            userEmail={userEmail}
+            userId={userId}
             bio={bio}
+            isVerified={isVerified}
             profilePic={profilePic}
             coverPic={coverPic}
             followersCount={followersCount}
             followingCount={followingCount}
+            likedSongsList={likedSongsList}
             playlists={playlists}
+            isEditingProfile={isEditingProfile}
+            setIsEditingProfile={setIsEditingProfile}
+            tempUsername={tempUsername}
+            setTempUsername={setTempUsername}
+            tempBio={tempBio}
+            setTempBio={setTempBio}
+            tempProfilePic={tempProfilePic}
+            setTempProfilePic={setTempProfilePic}
+            tempCoverPic={tempCoverPic}
+            setTempCoverPic={setTempCoverPic}
+            isSavingProfile={isSavingProfile}
+            handleSaveProfile={handleSaveProfile}
+            handleDeviceFileUpload={handleDeviceFileUpload}
+            setProfilePicFile={setProfilePicFile}
+            setCoverPicFile={setCoverPicFile}
+            renderAvatar={renderAvatar}
+            setIsFollowersModalOpen={setIsFollowersModalOpen}
+            setIsFollowingModalOpen={setIsFollowingModalOpen}
+            handleLogout={handleLogout}
           />
         )}
       </div>
@@ -241,7 +320,11 @@ export default function Home() {
           isOpen={isFollowersModalOpen} 
           onClose={() => setIsFollowersModalOpen(false)} 
           title="Pengikut" 
-          users={followersList} 
+          count={followersCount}
+          list={followersList} 
+          type="followers"
+          onAction={(id) => {}}
+          emptyText="Belum ada pengikut."
         />
       )}
 
@@ -250,16 +333,16 @@ export default function Home() {
           isOpen={isFollowingModalOpen} 
           onClose={() => setIsFollowingModalOpen(false)} 
           title="Mengikuti" 
-          users={followingList} 
+          count={followingCount}
+          list={followingList} 
+          type="following"
+          onAction={(id) => {}}
+          emptyText="Belum mengikuti siapapun."
         />
       )}
 
       {isMenuOpen && (
-        <SongMenuModal 
-          isOpen={isMenuOpen} 
-          onClose={() => setIsMenuOpen(false)} 
-          song={selectedSongForMenu} 
-        />
+        <SongMenuModal />
       )}
 
       <AddToPlayListModal 
@@ -277,17 +360,28 @@ export default function Home() {
       />
 
       {/* --- PLAYER & NAVIGASI BAWAH --- */}
-      {currentTrack && !isPlayerOpen && <MiniPlayer />}
-      <FullPlayer />
-
+      {currentTrack && !isPlayerOpen && (
+        <MiniPlayer 
+          currentTrack={currentTrack}
+          isPlayerOpen={isPlayerOpen}
+          setIsPlayerOpen={setIsPlayerOpen}
+          isPlaying={isPlaying}
+          isBuffering={isBuffering}
+          playedProgress={playedProgress}
+          togglePlay={() => setIsPlaying(!isPlaying)}
+          toggleLikeSong={(song) => {}}
+          isSongLiked={(videoId) => likedSongIds.includes(videoId)}
+        />
+      )}
+      
       {/* Bottom Navigation Bar */}
-      <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
-        <button onClick={() => setActiveTab('home')} className={`text-xs font-bold ${activeTab === 'home' ? 'text-white' : 'text-gray-400'}`}>Home</button>
-        <button onClick={() => setActiveTab('search')} className={`text-xs font-bold ${activeTab === 'search' ? 'text-white' : 'text-gray-400'}`}>Search</button>
-        <button onClick={() => setActiveTab('library')} className={`text-xs font-bold ${activeTab === 'library' ? 'text-white' : 'text-gray-400'}`}>Library</button>
-        <button onClick={() => setActiveTab('profile')} className={`text-xs font-bold ${activeTab === 'profile' ? 'text-white' : 'text-gray-400'}`}>Profile</button>
+      <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2 border-t border-white/5">
+        <button onClick={() => setActiveTab('home')} className={`text-xs font-bold transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-white'}`}>Home</button>
+        <button onClick={() => setActiveTab('search')} className={`text-xs font-bold transition-colors ${activeTab === 'search' ? 'text-white' : 'text-gray-400 hover:text-white'}`}>Search</button>
+        <button onClick={() => setActiveTab('library')} className={`text-xs font-bold transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-white'}`}>Library</button>
+        <button onClick={() => setActiveTab('profile')} className={`text-xs font-bold transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-white'}`}>Profile</button>
       </div>
     </div>
   );
-         }
-  
+    }
+        
