@@ -106,7 +106,7 @@ export default function Modals({
   isCollaborativePlaylist,
   setIsCollaborativePlaylist,
   collaboratorUsername,
-  setCollaboratorUsername
+  setCollaboratorUsername,
 }: ModalsProps) {
   return (
     <>
