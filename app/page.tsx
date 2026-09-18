@@ -1221,21 +1221,30 @@ export default function Home() {
       )}
 
       {isFullScreenSearch && (
-        <TrendingModal 
-          isOpen={isFullScreenSearch}
-          onClose={() => setIsFullScreenSearch(false)}
-          trendSongs={trendSongs}
-          onPlaySong={(song, idx) => {
-            playSong(song, trendSongs, idx);
-            setIsFullScreenSearch(false);
-          }}
-          renderSongMenuButton={(song) => (
-            <button onClick={(e) => { e.stopPropagation(); setSelectedSongForMenu(song); setIsMenuOpen(true); }} className="p-2 text-gray-400 hover:text-white">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-            </button>
-          )}
-        />
-      )}
+  <TrendingModal 
+    isOpen={isFullScreenSearch}
+    onClose={() => setIsFullScreenSearch(false)}
+    trendSongs={trendSongs}
+    onPlaySong={(song: any, idx: number) => {
+      playSong(song, trendSongs, idx);
+      setIsFullScreenSearch(false);
+    }}
+    renderSongMenuButton={(song: any) => (
+      <button 
+        onClick={(e) => { 
+          e.stopPropagation(); 
+          setSelectedSongForMenu(song); 
+          setIsMenuOpen(true); 
+        }} 
+        className="p-2 text-gray-400 hover:text-white"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
+      </button>
+    )}
+  />
+)}
 
       {/* --- PLAYER & NAVIGASI BAWAH --- */}
       {currentTrack && !isPlayerOpen && (
