@@ -45,7 +45,7 @@ export default function Page() {
   const [history, setHistory] = useState([]);
 
   // Handler contoh pemutaran lagu
-  const handlePlaySong = (song) => {
+  const handlePlaySong = (song: any) => {
     setCurrentSong(song);
     setIsPlaying(true);
     setHistory((prev) => [song, ...prev]);
