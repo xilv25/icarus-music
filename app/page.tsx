@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@supabase/supabase-js';
 
-// --- IMPORT 13 KOMPONEN SESUAI NAMA FILE ASLI DI REPO ANDA ---
+// --- IMPORT KOMPONEN ---
 import AddToPlayListModal from '@/components/AddToPlayListModal';
 import AuthForm from '@/components/AuthForm';
 import FollowListModal from '@/components/FollowListModal';
@@ -60,11 +60,7 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [randomSongs, setRandomSongs] = useState<any[]>([]);
-  const [randomSongsLimit, setRandomSongsLimit] = useState<number>(5);
   const [history, setHistory] = useState<any[]>([]);
-  const [historyDisplayLimit, setHistoryDisplayLimit] = useState<number>(5);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFullScreenSearch, setIsFullScreenSearch] = useState(false);
   const [trendSongs, setTrendSongs] = useState<any[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -79,7 +75,6 @@ export default function Home() {
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [followingList, setFollowingList] = useState<any[]>([]);
-  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
   const [viewingProfileCard, setViewingProfileCard] = useState<any | null>(null);
   const [viewingUserPlaylistsCount, setViewingUserPlaylistsCount] = useState(0);
   const [viewingUserFollowers, setViewingUserFollowers] = useState(0);
@@ -87,11 +82,7 @@ export default function Home() {
   const [isFollowingSelectedUser, setIsFollowingSelectedUser] = useState(false);
 
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [isCollaborativePlaylist, setIsCollaborativePlaylist] = useState(false);
-  const [collaboratorUsername, setCollaboratorUsername] = useState('');
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
-  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<any | null>(null);
 
@@ -103,18 +94,53 @@ export default function Home() {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [currentQueue, setCurrentQueue] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [isShuffle, setIsShuffle] = useState(false);
-  const [isRepeat, setIsRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [playedProgress, setPlayedProgress] = useState(0);
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
   const isSeekingRef = useRef(false);
 
-  const [lyrics, setLyrics] = useState<string | null>(null);
-  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
-  const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
-  const lyricContainerRef = useRef<HTMLDivElement>(null);
-  const activeLyricRef = useRef<HTMLDivElement>(null);
+  // --- HELPER FUNGSI PLAYER & INTERAKSI ---
+  const playSong = (song: any, queue: any[], index: number) => {
+    setCurrentTrack(song);
+    setCurrentQueue(queue);
+    setCurrentIndex(index);
+    setIsPlaying(true);
+    // Masukkan ke history jika belum ada
+    if (!history.some((h) => h.videoId === song.videoId)) {
+      setHistory((prev) => [song, ...prev]);
+    }
+  };
+
+  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const videoId = song.videoId;
+    if (likedSongIds.includes(videoId)) {
+      setLikedSongIds((prev) => prev.filter((id) => id !== videoId));
+      setToastMessage('Dihapus dari Liked Songs');
+    } else {
+      setLikedSongIds((prev) => [...prev, videoId]);
+      setToastMessage('Ditambahkan ke Liked Songs');
+    }
+  };
+
+  const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
+
+  const isSongPlayedBefore = (videoId: string) => history.some((item) => item.videoId === videoId);
+
+  const renderSongMenuButton = (song: any, e?: React.MouseEvent) => (
+    <button
+      onClick={(ev) => {
+        ev.stopPropagation();
+        setSelectedSongForMenu(song);
+        setIsMenuOpen(true);
+      }}
+      className="p-1.5 text-gray-400 hover:text-white transition-colors"
+    >
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+      </svg>
+    </button>
+  );
 
   // --- HELPER RENDER AVATAR ---
   const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
@@ -179,7 +205,6 @@ export default function Home() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
-    // Logika simpan profil bisa disesuaikan dengan database Supabase Anda
     setUsername(tempUsername);
     setBio(tempBio);
     if (tempProfilePic) setProfilePic(tempProfilePic);
@@ -233,7 +258,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Hidden React Player for YouTube Audio/Video Streaming */}
+      {/* Hidden React Player */}
       {currentTrack && (
         <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
           <ReactPlayer
@@ -271,8 +296,28 @@ export default function Home() {
         
         {activeTab === 'home' && (
           <div className="space-y-6 mt-4">
-            <SongListCarousel title="Trending Songs" songs={trendSongs} />
-            <SongListCarousel title="Rekomendasi Untukmu" songs={randomSongs} />
+            <SongListCarousel 
+              title="Trending Songs" 
+              songs={trendSongs} 
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              playSong={playSong}
+              toggleLikeSong={toggleLikeSong}
+              isSongLiked={isSongLiked}
+              isSongPlayedBefore={isSongPlayedBefore}
+              renderSongMenuButton={renderSongMenuButton}
+            />
+            <SongListCarousel 
+              title="Rekomendasi Untukmu" 
+              songs={randomSongs} 
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              playSong={playSong}
+              toggleLikeSong={toggleLikeSong}
+              isSongLiked={isSongLiked}
+              isSongPlayedBefore={isSongPlayedBefore}
+              renderSongMenuButton={renderSongMenuButton}
+            />
           </div>
         )}
 
@@ -323,7 +368,7 @@ export default function Home() {
           count={followersCount}
           list={followersList} 
           type="followers"
-          onAction={(id) => {}}
+          onAction={() => {}}
           emptyText="Belum ada pengikut."
         />
       )}
@@ -336,20 +381,37 @@ export default function Home() {
           count={followingCount}
           list={followingList} 
           type="following"
-          onAction={(id) => {}}
+          onAction={() => {}}
           emptyText="Belum mengikuti siapapun."
         />
       )}
 
-      {isMenuOpen && (
-        <SongMenuModal />
+      {isMenuOpen && selectedSongForMenu && (
+        <SongMenuModal 
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          song={selectedSongForMenu}
+          currentTrack={currentTrack}
+          isLiked={isSongLiked(selectedSongForMenu?.videoId)}
+          onToggleLike={(song) => toggleLikeSong(song)}
+          onOpenAddToPlaylist={(song) => {
+            setIsMenuOpen(false);
+            setSongToAddToPlaylist(song);
+            setIsAddToPlaylistOpen(true);
+          }}
+          onShare={(song) => {
+            navigator.clipboard.writeText(`https://www.youtube.com/watch?v=${song.videoId}`);
+            setToastMessage('Link lagu disalin ke clipboard!');
+            setIsMenuOpen(false);
+          }}
+        />
       )}
 
       <AddToPlayListModal 
         isOpen={isAddToPlaylistOpen}
         onClose={() => setIsAddToPlaylistOpen(false)}
         playlists={playlists}
-        onSelectPlaylist={(playlistId) => {
+        onSelectPlaylist={() => {
           setIsAddToPlaylistOpen(false);
           setToastMessage('Lagu ditambahkan ke playlist!');
         }}
@@ -369,8 +431,8 @@ export default function Home() {
           isBuffering={isBuffering}
           playedProgress={playedProgress}
           togglePlay={() => setIsPlaying(!isPlaying)}
-          toggleLikeSong={(song) => {}}
-          isSongLiked={(videoId) => likedSongIds.includes(videoId)}
+          toggleLikeSong={toggleLikeSong}
+          isSongLiked={isSongLiked}
         />
       )}
       
@@ -383,5 +445,5 @@ export default function Home() {
       </div>
     </div>
   );
-    }
-        
+        }
+            
