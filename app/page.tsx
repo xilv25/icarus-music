@@ -97,6 +97,23 @@ export default function Home() {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
   const [collabRequests, setCollabRequests] = useState<any[]>([]);
+  const [activePlaylistView, setActivePlaylistView] = useState...
+const [collabRequests, setCollabRequests] = useState<any[]>([]);
+
+// Handler untuk terima & tolak undangan
+const handleAcceptCollabRequest = (req: any) => {
+  setCollabRequests((prev) => prev.filter((r) => r.id !== req.id));
+  if (typeof setToastMessage === 'function') {
+    setToastMessage(`Berhasil bergabung ke playlist "${req.playlistName}"`);
+  }
+};
+
+const handleRejectCollabRequest = (req: any) => {
+  setCollabRequests((prev) => prev.filter((r) => r.id !== req.id));
+  if (typeof setToastMessage === 'function') {
+    setToastMessage(`Menolak undangan kolaborasi`);
+  }
+};
 
   // --- 5. MODAL STATES ---
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
@@ -1016,42 +1033,42 @@ export default function Home() {
         </div>
 
         {/* Notifikasi Undangan Kolaborasi */}
-        {collabRequests && collabRequests.length > 0 && (
-          <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
-            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-              <svg className="w-4 h-4 fill-purple-400" viewBox="0 0 24 24">
-                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
-              </svg>
-              Undangan Playlist Kolaborasi
-            </h3>
-            <div className="flex flex-col gap-2">
-              {collabRequests.map((req: any) => (
-                <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-white font-semibold">
-                      @{req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.playlistName}"</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => typeof handleAcceptCollabRequest !== 'undefined' && handleAcceptCollabRequest(req)} 
-                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Setujui
-                    </button>
-                    <button 
-                      onClick={() => typeof handleRejectCollabRequest !== 'undefined' && handleRejectCollabRequest(req)} 
-                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Tolak
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+{collabRequests && collabRequests.length > 0 && (
+  <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
+    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+      <svg className="w-4 h-4 fill-purple-400" viewBox="0 0 24 24">
+        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+      </svg>
+      Undangan Playlist Kolaborasi
+    </h3>
+    <div className="flex flex-col gap-2">
+      {collabRequests.map((req: any) => (
+        <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
+          <div className="flex flex-col">
+            <span className="text-xs text-white font-semibold">
+              @{req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.playlistName}"</span>
+            </span>
+            <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handleAcceptCollabRequest(req)} 
+              className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
+            >
+              Setujui
+            </button>
+            <button 
+              onClick={() => handleRejectCollabRequest(req)} 
+              className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
+            >
+              Tolak
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
         {/* Liked Songs Entry */}
         <div 
