@@ -1,184 +1,228 @@
-// app/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
-// Import seluruh komponen modular yang telah dibuat
-import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
-import Player from '@/components/Player';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { createClient } from '@supabase/supabase-js';
+
+// --- IMPORT 13 KOMPONEN MODULAR ANDA ---
+// Sesuaikan jalur (path) folder import ini dengan direktori komponen Anda (misal: '@/components/...')
+import AuthView from '@/components/AuthView';
+import HomeTab from '@/components/HomeTab';
+import SearchTab from '@/components/SearchTab';
+import LibraryTab from '@/components/LibraryTab';
+import ProfileTab from '@/components/ProfileTab';
+import MiniPlayer from '@/components/MiniPlayer';
 import FullPlayer from '@/components/FullPlayer';
-import HomeView from '@/components/HomeView';
-import SearchView from '@/components/SearchView';
-import LibraryView from '@/components/LibraryView';
-import ProfileView from '@/components/ProfileView';
-import PlaylistDetailView from '@/components/PlaylistDetailView';
-import LikedSongsView from '@/components/LikedSongsView';
-import AuthModal from '@/components/AuthModal';
-import EditProfileModal from '@/components/EditProfileModal';
+import SongMenuModal from '@/components/SongMenuModal';
+import AddToPlaylistModal from '@/components/AddToPlaylistModal';
 import CreatePlaylistModal from '@/components/CreatePlaylistModal';
 import FollowersModal from '@/components/FollowersModal';
 import FollowingModal from '@/components/FollowingModal';
-import AddSongModal from '@/components/AddSongModal';
+import UserProfileCardModal from '@/components/UserProfileCardModal';
+import FullScreenSearchModal from '@/components/FullScreenSearchModal';
 
-export default function Page() {
-  // Seluruh State, Supabase Client, dan Logika Aslimu Tetap Utuh Di Sini
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
+
+export default function Home() {
+  // --- 1. GLOBAL & AUTH STATES ---
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authInput, setAuthInput] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // --- 2. USER PROFILE STATES ---
+  const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [profilePic, setProfilePic] = useState('');
+  const [coverPic, setCoverPic] = useState('');
+  const [bio, setBio] = useState('Music lover & Vibe enthusiast.');
+  const [isVerified, setIsVerified] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
+  const [coverPicFile, setCoverPicFile] = useState<File | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [tempUsername, setTempUsername] = useState('');
+  const [tempProfilePic, setTempProfilePic] = useState('');
+  const [tempCoverPic, setTempCoverPic] = useState('');
+  const [tempBio, setTempBio] = useState('');
+
+  // --- 3. NAVIGATION & APP STATES ---
   const [activeTab, setActiveTab] = useState('home');
-  const [currentSong, setCurrentSong] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [user, setUser] = useState(null);
-  
-  // Contoh state modal & view navigasi tambahan
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [isLikedSongsView, setIsLikedSongsView] = useState(false);
-
-  // Data dummy/state handler bawaan aslimu
-  const [featuredSongs, setFeaturedSongs] = useState([]);
-  const [podcasts, setPodcasts] = useState([]);
-  const [playlists, setPlaylists] = useState([]);
-  const [likedSongs, setLikedSongs] = useState([]);
+  const [homeSubTab, setHomeSubTab] = useState<'all' | 'music' | 'podcast'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [queue, setQueue] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [randomSongs, setRandomSongs] = useState<any[]>([]);
+  const [randomSongsLimit, setRandomSongsLimit] = useState<number>(5);
   const [history, setHistory] = useState<any[]>([]);
+  const [historyDisplayLimit, setHistoryDisplayLimit] = useState<number>(5);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFullScreenSearch, setIsFullScreenSearch] = useState(false);
+  const [trendSongs, setTrendSongs] = useState<any[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Handler contoh pemutaran lagu
-  const handlePlaySong = (song: any) => {
-    setCurrentSong(song);
-    setIsPlaying(true);
-    setHistory((prev) => [song, ...prev]);
-  };
+  // --- 4. LIBRARY & PLAYLIST STATES ---
+  const [likedSongIds, setLikedSongIds] = useState<string[]>([]);
+  const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
+  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [activePlaylistView, setActivePlaylistView] = useState<any | null>(null);
+
+  // --- 5. MODAL STATES ---
+  const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
+  const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followingList, setFollowingList] = useState<any[]>([]);
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [viewingProfileCard, setViewingProfileCard] = useState<any | null>(null);
+  const [viewingUserPlaylistsCount, setViewingUserPlaylistsCount] = useState(0);
+  const [viewingUserFollowers, setViewingUserFollowers] = useState(0);
+  const [viewingUserFollowing, setViewingUserFollowing] = useState(0);
+  const [isFollowingSelectedUser, setIsFollowingSelectedUser] = useState(false);
+
+  const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isCollaborativePlaylist, setIsCollaborativePlaylist] = useState(false);
+  const [collaboratorUsername, setCollaboratorUsername] = useState('');
+  const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
+  const [songToAddToPlaylist, setSongToAddToPlaylist] = useState<any | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [selectedSongForMenu, setSelectedSongForMenu] = useState<any | null>(null);
+
+  // --- 6. PLAYER STATES ---
+  const playerRef = useRef<any>(null);
+  const [currentTrack, setCurrentTrack] = useState<any>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  const [currentQueue, setCurrentQueue] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [isRepeat, setIsRepeat] = useState<'off' | 'all' | 'one'>('off');
+  const [playedProgress, setPlayedProgress] = useState(0);
+  const [playedSeconds, setPlayedSeconds] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const isSeekingRef = useRef(false);
+
+  const [lyrics, setLyrics] = useState<string | null>(null);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
+  const [isLyricsExpanded, setIsLyricsExpanded] = useState(false);
+  const lyricContainerRef = useRef<HTMLDivElement>(null);
+  const activeLyricRef = useRef<HTMLDivElement>(null);
+
+  // --- INITIALIZATION & LOGIC HANDLERS (Auth, Supabase, Player, dll) ---
+  // (Fungsi-fungsi handler seperti playSong, handleSearch, toggleLikeSong, dll. diletakkan di sini 
+  // atau dibungkus menggunakan React Context agar kode page.tsx ini tetap ringkas dan elegan).
+
+  // Jika belum login, tampilkan Komponen Auth
+  if (!isLoggedIn) {
+    return (
+      <AuthView 
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authInput={authInput}
+        setAuthInput={setAuthInput}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        showPassword={showPassword}
+        setShowPassword={setShowPassword}
+        authError={authError}
+        setAuthError={setAuthError}
+        // Kirim fungsi handleAuthSubmit di sini
+      />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col md:flex-row">
-      {/* Sidebar Desktop */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          setSelectedPlaylist(null);
-          setIsLikedSongsView(false);
-        }}
-        onOpenCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
-        onOpenLikedSongs={() => setIsLikedSongsView(true)}
-        playlists={playlists}
-        onSelectPlaylist={(pl) => {
-          setSelectedPlaylist(pl);
-          setIsLikedSongsView(false);
-        }}
-      />
+    <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
+      
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs animate-bounce">
+          {toastMessage}
+        </div>
+      )}
 
-      {/* Konten Utama Berdasarkan Tab / View yang Aktif */}
-      <main className="flex-1 md:ml-64 min-h-screen">
-        {selectedPlaylist ? (
-          <PlaylistDetailView
-            playlist={selectedPlaylist}
-            onBack={() => setSelectedPlaylist(null)}
-            onPlaySong={handlePlaySong}
-            onAddSongClick={() => {}}
+      {/* Hidden React Player for YouTube Audio/Video Streaming */}
+      {currentTrack && (
+        <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
+          <ReactPlayer
+            ref={playerRef}
+            url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
+            playing={isPlaying}
+            onReady={() => setIsBuffering(false)}
+            onBuffer={() => setIsBuffering(true)}
+            onBufferEnd={() => setIsBuffering(false)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onProgress={({ played, playedSeconds }) => {
+              if (!isSeekingRef.current) {
+                setPlayedProgress(played);
+                setPlayedSeconds(playedSeconds);
+              }
+            }}
+            onDuration={(dur) => setDuration(dur)}
+            // onEnded={handleNext}
+            volume={1}
+            width="100%"
+            height="100%"
           />
-        ) : isLikedSongsView ? (
-          <LikedSongsView
-            likedSongs={likedSongs}
-            onBack={() => setIsLikedSongsView(false)}
-            onPlaySong={handlePlaySong}
-            onToggleLike={() => {}}
+        </div>
+      )}
+
+      {/* --- KONTEN UTAMA BERDASARKAN TAB AKTIF --- */}
+      <div className="pb-32 px-4 pt-2 overflow-y-auto">
+        {activeTab === 'home' && (
+          <HomeTab 
+            // Teruskan props dan state yang dibutuhkan Home
           />
-        ) : (
-          <>
-            {activeTab === 'home' && (
-              <HomeView
-                featuredSongs={featuredSongs}
-                podcasts={podcasts}
-                onPlaySong={handlePlaySong}
-                onAddToPlaylist={() => {}}
-              />
-            )}
-            {activeTab === 'search' && (
-              <SearchView
-                onSearch={async (q) => {}}
-                searchResults={searchResults}
-                onPlaySong={handlePlaySong}
-                onAddToPlaylist={() => {}}
-              />
-            )}
-            {activeTab === 'library' && (
-              <LibraryView
-                likedSongs={likedSongs}
-                playlists={playlists}
-                onOpenLikedSongs={() => setIsLikedSongsView(true)}
-                onOpenCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
-                onSelectPlaylist={(pl) => setSelectedPlaylist(pl)}
-              />
-            )}
-            {activeTab === 'profile' && (
-              <ProfileView
-                user={user}
-                onOpenEditProfile={() => setIsEditProfileOpen(true)}
-                onOpenFollowers={() => {}}
-                onOpenFollowing={() => {}}
-                onLogout={() => setUser(null)}
-                followersCount={0}
-                followingCount={0}
-              />
-            )}
-          </>
         )}
-      </main>
 
-      {/* Bottom Nav Mobile */}
-      <BottomNav
-        activeTab={activeTab}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          setSelectedPlaylist(null);
-          setIsLikedSongsView(false);
-        }}
-      />
+        {activeTab === 'search' && (
+          <SearchTab 
+            // Teruskan props dan state pencarian
+          />
+        )}
 
-      {/* Mini Player */}
-      <Player
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrev={() => {}}
-        progress={0}
-        duration={100}
-        onSeek={() => {}}
-        volume={1}
-        onVolumeChange={() => {}}
-        onOpenFullPlayer={() => setIsFullPlayerOpen(true)}
-        isLiked={false}
-        onToggleLike={() => {}}
-      />
+        {activeTab === 'library' && (
+          <LibraryTab 
+            // Teruskan props library & playlist
+          />
+        )}
 
-      {/* Full-Screen Player Modal */}
-      <FullPlayer
-        isOpen={isFullPlayerOpen}
-        onClose={() => setIsFullPlayerOpen(false)}
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrev={() => {}}
-        progress={0}
-        duration={100}
-        onSeek={() => {}}
-        isLiked={false}
-        onToggleLike={() => {}}
-        queue={queue}
-        history={history}
-        onSelectSong={handlePlaySong}
-      />
+        {activeTab === 'profile' && (
+          <ProfileTab 
+            // Teruskan props profil & data Supabase
+          />
+        )}
+      </div>
 
-      {/* Modals Lainnya */}
-      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={setUser} />
-      <EditProfileModal isOpen={isEditProfileOpen} onClose={() => setIsEditProfileOpen(false)} user={user} onSave={() => {}} />
-      <CreatePlaylistModal isOpen={isCreatePlaylistOpen} onClose={() => setIsCreatePlaylistOpen(false)} onCreate={() => {}} />
+      {/* --- MODAL-MODAL PENDUKUNG --- */}
+      {viewingProfileCard && <UserProfileCardModal />}
+      {isFollowersModalOpen && <FollowersModal />}
+      {isFollowingModalOpen && <FollowingModal />}
+      {isFullScreenSearch && <FullScreenSearchModal />}
+      {isMenuOpen && <SongMenuModal />}
+      {isAddToPlaylistOpen && <AddToPlaylistModal />}
+      {isCreatePlaylistOpen && <CreatePlaylistModal />}
+
+      {/* --- PLAYER & NAVIGASI BAWAH --- */}
+      {currentTrack && !isPlayerOpen && <MiniPlayer />}
+      <FullPlayer />
+
+      {/* Bottom Navigation Bar */}
+      <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2">
+        {/* Nav Button Home, Search, Library, Profile */}
+      </div>
     </div>
   );
-      }
+    }
+    
