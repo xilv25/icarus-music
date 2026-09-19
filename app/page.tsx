@@ -1138,7 +1138,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
        {/* Hidden React Player for YouTube Audio/Video Streaming */}
       {currentTrack && (
-        <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
+        <div className="fixed -top-[200%] -left-[200%] w-[1px] h-[1px] opacity-0 pointer-events-none">
           <ReactPlayer
             ref={playerRef}
             url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
@@ -1149,8 +1149,8 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
             onBufferEnd={() => setIsBuffering(false)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => {
-              // Mencegah lagu otomatis berhenti saat Chrome di-minimize di HP
-              if (document.visibilityState === 'visible') {
+              // Mencegah lagu otomatis berhenti saat aplikasi di-minimize di HP
+              if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
                 setIsPlaying(false);
               }
             }}
@@ -1164,10 +1164,17 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
             volume={1}
             width="100%"
             height="100%"
+            config={{
+              youtube: {
+                playerVars: {
+                  playsinline: 1,
+                },
+              },
+            }}
           />
         </div>
       )}
-
+      
       {/* --- KONTEN UTAMA BERDASARKAN TAB AKTIF --- */}
       <div className="pb-32 px-4 pt-2 overflow-y-auto">
         <HomeHeader 
