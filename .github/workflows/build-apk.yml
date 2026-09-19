@@ -33,11 +33,15 @@ jobs:
           mkdir -p android/app/src/main/assets
           npx cap sync android
 
+      - name: Fix Duplicate Kotlin Dependencies
+        run: |
+          echo "android { configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
+
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
       - name: Build Android APK
         run: |
