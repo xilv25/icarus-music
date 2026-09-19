@@ -26,12 +26,11 @@ jobs:
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Add Android Platform
+      - name: Prepare Assets & Add Android Platform
         run: |
-          npx cap add android
-
-      - name: Sync Capacitor
-        run: |
+          mkdir -p out
+          npx cap add android || true
+          mkdir -p android/app/src/main/assets
           npx cap sync android
 
       - name: Setup Java JDK
