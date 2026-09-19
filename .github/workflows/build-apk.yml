@@ -25,7 +25,7 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install Dependencies (Termasuk Capacitor yang sudah terkunci versinya)
+      - name: Install Dependencies
         run: npm install
 
       - name: Build Next.js Web App
@@ -37,13 +37,16 @@ jobs:
 
       - name: Generate Fresh Android Project & Inject Custom Code
         run: |
-          # 1. Tambahkan platform Android menggunakan CLI lokal project
+          # 1. HAPUS total folder android lama agar tidak ada cache/sisa file nyangkut
+          rm -rf android
+
+          # 2. Tambahkan platform Android dari awal
           npx cap add android
 
-          # 2. Hapus MainActivity.java bawaan agar tidak konflik dengan Kotlin
+          # 3. Hapus MainActivity.java bawaan agar tidak konflik dengan Kotlin
           rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
 
-          # 3. Timpa file dengan kode custom background player dari folder native-source
+          # 4. Timpa file dengan kode custom dari folder native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
@@ -51,18 +54,19 @@ jobs:
             cp -f native-source/AndroidManifest.xml android/app/src/main/
           fi
 
-          # 4. Sinkronisasi project
+          # 5. Sinkronisasi project
           npx cap sync android
 
       - name: Fix Namespace & Duplicate Kotlin Dependencies
         run: |
           echo "android { namespace 'com.icarus.music'; configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
 
-      - name: Build Android APK
+      - name: Build Android APK (Clean Build)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          # Tambahkan 'clean' agar cache lama dibersihkan dan memaksa compile ulang
+          ./gradlew clean assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
