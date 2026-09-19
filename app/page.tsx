@@ -512,7 +512,8 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     setIsLoading(false);
   };
 
-  const fetchSupabaseProfile = async (uid: string, email: string) => {
+    const fetchSupabaseProfile = async (uid: string, email: string) => {
+    setAuthUserId(uid); // Simpan UUID Auth asli untuk relasi database
     try {
       const { data } = await supabase
         .from('profiles')
@@ -526,7 +527,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
           activeNumericId = generateRandomId();
           await supabase.from('profiles').update({ numeric_id: activeNumericId }).eq('email', email);
         }
-        setUserId(activeNumericId);
+        setUserId(activeNumericId); // numeric_id tetap untuk tampilan profil
         setUsername(data.username || email.split('@')[0]);
         setTempUsername(data.username || email.split('@')[0]);
         setProfilePic(data.profile_pic || '');
