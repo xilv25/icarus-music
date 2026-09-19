@@ -773,16 +773,26 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   };
 
   const handleNext = () => {
-    if (currentQueue.length === 0) return;
-    let nextIndex = currentIndex + 1;
-    if (isShuffle) {
-      nextIndex = Math.floor(Math.random() * currentQueue.length);
-    } else if (nextIndex >= currentQueue.length) {
+  if (currentQueue.length === 0) return;
+
+  let nextIndex = currentIndex + 1;
+
+  if (isShuffle) {
+    if (currentQueue.length > 1) {
+      // Cari index acak yang tidak sama dengan lagu saat ini
+      do {
+        nextIndex = Math.floor(Math.random() * currentQueue.length);
+      } while (nextIndex === currentIndex);
+    } else {
       nextIndex = 0;
     }
-    setCurrentIndex(nextIndex);
-    playSong(currentQueue[nextIndex], currentQueue, nextIndex);
-  };
+  } else if (nextIndex >= currentQueue.length) {
+    nextIndex = 0; // Kembali ke awal antrean jika sudah di ujung
+  }
+
+  setCurrentIndex(nextIndex);
+  playSong(currentQueue[nextIndex], currentQueue, nextIndex);
+};
 
   const handlePrev = () => {
     if (currentQueue.length === 0) return;
@@ -804,6 +814,28 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   };
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
+
+    // MediaSession API untuk background playback & tombol media
+  useEffect(() => {
+    if (currentTrack && 'mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title || 'Unknown Title',
+        artist: currentTrack.artists?.[0]?.name || 'Unknown Artist',
+        artwork: [
+          {
+            src: currentTrack.thumbnail || getHighResCover(currentTrack.thumbnail),
+            sizes: '512x512',
+            type: 'image/jpeg'
+          }
+        ]
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
+      navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
+      navigator.mediaSession.setActionHandler('previoustrack', handlePrev);
+      navigator.mediaSession.setActionHandler('nexttrack', handleNext);
+    }
+  }, [currentTrack]);
 
   // --- HELPER RENDER AVATAR ---
   const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
@@ -1072,13 +1104,14 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
         </div>
       )}
 
-      {/* Hidden React Player for YouTube Audio/Video Streaming */}
+            {/* Hidden React Player for YouTube Audio/Video Streaming */}
       {currentTrack && (
         <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
           <ReactPlayer
             ref={playerRef}
             url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
             playing={isPlaying}
+            onEnded={handleEnded} // <-- TAMBAHAN DI SINI (auto play lagu berikutnya)
             onReady={() => setIsBuffering(false)}
             onBuffer={() => setIsBuffering(true)}
             onBufferEnd={() => setIsBuffering(false)}
