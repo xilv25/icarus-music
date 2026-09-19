@@ -136,6 +136,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const [playedSeconds, setPlayedSeconds] = useState(0);
   const [duration, setDuration] = useState(0);
   const isSeekingRef = useRef(false);
+  const silentAudioRef = useRef<HTMLAudioElement>(null);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
@@ -853,25 +854,16 @@ useEffect(() => {
   navigator.mediaSession.setActionHandler('nexttrack', handleNext);
 }, [currentTrack, isPlaying]); // <--- Wajib masukkan isPlaying di sini
 
-          // Trik Silent Audio Keep-Alive untuk Mobile Background Playback
+  // Trik Silent Audio Keep-Alive via tag <audio> di DOM (Solusi untuk APK Android)
   useEffect(() => {
-    let silentAudio: HTMLAudioElement | null = null;
-
-    if (isPlaying) {
-      // Menggunakan file audio hening 1 detik yang di-loop
-      silentAudio = new Audio('https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3');
-      silentAudio.loop = true;
-      silentAudio.play().catch(() => {
-        // Autoplay terblokir browser jika belum ada interaksi pengguna
-      });
-    }
-
-    return () => {
-      if (silentAudio) {
-        silentAudio.pause();
-        silentAudio = null;
+    if (silentAudioRef.current) {
+      if (isPlaying) {
+        // Mainkan audio hening agar OS Android mengunci notifikasi media
+        silentAudioRef.current.play().catch(() => console.log("Autoplay ditahan browser"));
+      } else {
+        silentAudioRef.current.pause();
       }
-    };
+    }
   }, [isPlaying]);
 
   // --- HELPER RENDER AVATAR ---
@@ -1134,6 +1126,15 @@ useEffect(() => {
   return (
     <div className="bg-black min-h-screen text-white font-sans selection:bg-gray-700">
       
+      {/* Audio Hening Fisik untuk memancing Notifikasi Media OS & Mencegah Freeze */}
+      <audio
+        ref={silentAudioRef}
+        src="https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3"
+        loop
+        playsInline
+        className="hidden"
+      />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white text-black font-semibold px-4 py-2 rounded-full shadow-2xl z-[100] text-xs animate-bounce">
