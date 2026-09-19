@@ -827,26 +827,31 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
   // MediaSession API untuk background playback & tombol media
-  useEffect(() => {
-    if (currentTrack && 'mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title || 'Unknown Title',
-        artist: currentTrack.artists?.[0]?.name || 'Unknown Artist',
-        artwork: [
-          {
-            src: currentTrack.thumbnail || getHighResCover(currentTrack.thumbnail),
-            sizes: '512x512',
-            type: 'image/jpeg'
-          }
-        ]
-      });
+useEffect(() => {
+  if (!currentTrack || !('mediaSession' in navigator)) return;
 
-      navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
-      navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
-      navigator.mediaSession.setActionHandler('previoustrack', handlePrev);
-      navigator.mediaSession.setActionHandler('nexttrack', handleNext);
-    }
-  }, [currentTrack]);
+  // 1. Set Metadata Lagu ke Notifikasi HP
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: currentTrack.title || 'Unknown Title',
+    artist: currentTrack.artists?.[0]?.name || 'Unknown Artist',
+    artwork: [
+      {
+        src: currentTrack.thumbnail || getHighResCover(currentTrack.thumbnail),
+        sizes: '512x512',
+        type: 'image/jpeg',
+      },
+    ],
+  });
+
+  // 2. Wajib Sync Status Play/Pause ke OS Android
+  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+  // 3. Handler Tombol Media di Notifikasi
+  navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
+  navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
+  navigator.mediaSession.setActionHandler('previoustrack', handlePrev);
+  navigator.mediaSession.setActionHandler('nexttrack', handleNext);
+}, [currentTrack, isPlaying]); // <--- Wajib masukkan isPlaying di sini
 
           // Trik Silent Audio Keep-Alive untuk Mobile Background Playback
   useEffect(() => {
@@ -1149,11 +1154,16 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
             onBufferEnd={() => setIsBuffering(false)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => {
-              // Mencegah lagu otomatis berhenti saat aplikasi di-minimize di HP
-              if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-                setIsPlaying(false);
-              }
-            }}
+  // Jika YouTube mencoba memaksa pause saat aplikasi di-minimize/background
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    // Paksa pemutar YouTube untuk resume/putar balik di background
+    setTimeout(() => {
+      playerRef.current?.getInternalPlayer()?.playVideo?.();
+    }, 100);
+  } else {
+    setIsPlaying(false);
+  }
+}}
             onProgress={({ played, playedSeconds }) => {
               if (!isSeekingRef.current) {
                 setPlayedProgress(played);
