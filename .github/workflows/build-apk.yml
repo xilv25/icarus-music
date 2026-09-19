@@ -30,7 +30,6 @@ jobs:
 
       - name: Build Next.js Web App
         run: |
-          # Buat folder out kosong atau jalankan build jika konfigurasi mengizinkan
           mkdir -p out
           echo "Icarus Music" > out/index.html
 
@@ -53,9 +52,9 @@ jobs:
 
           npx cap sync android
 
-      - name: Fix Duplicate Kotlin Dependencies
+      - name: Fix Namespace & Duplicate Kotlin Dependencies
         run: |
-          echo "android { configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
+          echo "android { namespace 'com.icarus.music'; configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
 
       - name: Build Android APK
         run: |
