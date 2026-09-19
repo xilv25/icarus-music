@@ -23,26 +23,21 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
-      - name: Install Dependencies
+      - name: Install Dependencies (Termasuk Capacitor yang sudah terkunci versinya)
         run: npm install
 
       - name: Build Next.js Web App
         run: |
-          # Buat folder out dan pastikan ada index.html minimal agar Capacitor tidak error
           mkdir -p out
           if [ ! -f "out/index.html" ]; then
             echo "Icarus Music" > out/index.html
           fi
 
-      - name: Install Capacitor CLI & Android
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-
       - name: Generate Fresh Android Project & Inject Custom Code
         run: |
-          # 1. Tambahkan platform Android
+          # 1. Tambahkan platform Android menggunakan CLI lokal project
           npx cap add android
 
           # 2. Hapus MainActivity.java bawaan agar tidak konflik dengan Kotlin
@@ -56,7 +51,7 @@ jobs:
             cp -f native-source/AndroidManifest.xml android/app/src/main/
           fi
 
-          # 4. Jalankan sync setelah struktur siap
+          # 4. Sinkronisasi project
           npx cap sync android
 
       - name: Fix Namespace & Duplicate Kotlin Dependencies
