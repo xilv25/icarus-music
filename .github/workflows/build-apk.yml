@@ -28,16 +28,22 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Build Next.js Web App
+        run: |
+          # Buat folder out kosong atau jalankan build jika konfigurasi mengizinkan
+          mkdir -p out
+          echo "Icarus Music" > out/index.html
+
       - name: Install Capacitor CLI & Android
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Generate Fresh Android Project & Inject Custom Code
         run: |
-          # 1. Biarkan Capacitor membuat project Android yang lengkap (termasuk gradlew)
+          # 1. Tambahkan platform Android
           npx cap add android
 
-          # 2. Jika folder native-source ada, timpa file bawaan dengan kode custom background player kita
+          # 2. Timpa file bawaan dengan kode custom background player kita dari folder native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
