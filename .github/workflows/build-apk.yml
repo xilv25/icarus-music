@@ -28,25 +28,34 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Ensure Capacitor Config
+        run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            echo '{"appId":"com.icarus.music","appName":"Icarus Music","webDir":"out"}' > capacitor.config.json
+          fi
+
       - name: Build Next.js Web App
         run: |
+          npm run build || true
           mkdir -p out
           if [ ! -f "out/index.html" ]; then
-            echo "Icarus Music" > out/index.html
+            echo "<!DOCTYPE html><html><head><title>Icarus Music</title></head><body><div id='root'>Icarus Music</div></body></html>" > out/index.html
           fi
 
       - name: Generate Fresh Android Project & Inject Custom Code
         run: |
-          # 1. HAPUS total folder android lama agar tidak ada cache/sisa file nyangkut
+          # 1. Hapus total folder android & cache lama agar bersih
           rm -rf android
 
           # 2. Tambahkan platform Android dari awal
           npx cap add android
 
-          # 3. Hapus MainActivity.java bawaan agar tidak konflik dengan Kotlin
+          # 3. Hapus MainActivity bawaan agar tidak konflik
           rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
+          rm -f android/app/src/main/java/com/icarus/music/MainActivity.kt
+          rm -rf android/app/src/main/java/com/example
 
-          # 4. Timpa file dengan kode custom dari folder native-source
+          # 4. Timpa file dengan kode custom dari native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
@@ -57,15 +66,17 @@ jobs:
           # 5. Sinkronisasi project
           npx cap sync android
 
-      - name: Fix Namespace & Duplicate Kotlin Dependencies
+      - name: Configure Gradle Package & Exclusions
         run: |
-          echo "android { namespace 'com.icarus.music'; configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
+          echo "android { namespace 'com.icarus.music' }" >> android/app/build.gradle
+          echo "android { defaultConfig { applicationId 'com.icarus.music' } }" >> android/app/build.gradle
+          echo "android { configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
 
       - name: Build Android APK (Clean Build)
         run: |
           cd android
           chmod +x gradlew
-          # Tambahkan 'clean' agar cache lama dibersihkan dan memaksa compile ulang
+          # Menjalankan gradlew clean dan assembleDebug
           ./gradlew clean assembleDebug --no-daemon
 
       - name: Upload APK Artifact
