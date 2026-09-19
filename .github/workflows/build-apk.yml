@@ -32,25 +32,20 @@ jobs:
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Prepare Assets & Generate App Icon
+      - name: Generate Fresh Android Project & Inject Custom Code
         run: |
-          mkdir -p out
-          npx cap add android || true
-          mkdir -p android/app/src/main/assets
-          
-          # Otomatis generate ikon jika folder resources dan icon.jpg/.png tersedia
-          if [ -d "resources" ]; then
-            npx capacitor-assets generate || true
-          fi
-          
-          npx cap sync android
+          # 1. Biarkan Capacitor membuat project Android yang lengkap (termasuk gradlew)
+          npx cap add android
 
-      - name: Inject Background Playback Permissions
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if [ -f "$MANIFEST" ]; then
-            sed -i '/<application/i \    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />' $MANIFEST
+          # 2. Jika folder native-source ada, timpa file bawaan dengan kode custom background player kita
+          if [ -d "native-source" ]; then
+            mkdir -p android/app/src/main/java/com/icarus/music
+            cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
+            cp -f native-source/MusicService.kt android/app/src/main/java/com/icarus/music/
+            cp -f native-source/AndroidManifest.xml android/app/src/main/
           fi
+
+          npx cap sync android
 
       - name: Fix Duplicate Kotlin Dependencies
         run: |
