@@ -970,101 +970,84 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     // Helper cek UUID
   const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
 
-  // --- PLAYLIST HANDLERS ---
+    // --- PLAYLIST HANDLERS (FULL SUPABASE) ---
   const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    if (isUuid(playlistId)) {
-      const { error } = await supabase.from('playlists').delete().eq('id', playlistId);
-      if (error) {
-        console.error('Gagal hapus playlist di Supabase:', error);
-        setToastMessage("Gagal menghapus playlist dari server.");
-        return;
-      }
-      fetchPlaylists();
-    } else {
-      const updated = playlists.filter(pl => pl.id !== playlistId);
-      setPlaylists(updated);
-      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    const { error } = await supabase.from('playlists').delete().eq('id', playlistId);
+    if (error) {
+      console.error('Gagal hapus playlist di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal menghapus playlist dari server.");
+      return;
     }
 
+    // Panggil fungsi fetch data baru menggantikan fetchPlaylists()
+    fetchAllUserData();
+
     if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
-    setToastMessage("Playlist berhasil dihapus.");
+    if (setToastMessage) setToastMessage("Playlist berhasil dihapus.");
   };
 
   const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    const targetPl = playlists.find(p => p.id === playlistId);
+    const targetPl = playlists.find((p: any) => p.id === playlistId);
     if (!targetPl) return;
 
     const filteredSongs = (targetPl.songs || []).filter((s: any) => s.videoId !== videoId);
 
-    if (isUuid(playlistId)) {
-      const { error } = await supabase
-        .from('playlists')
-        .update({ songs: filteredSongs })
-        .eq('id', playlistId);
+    const { error } = await supabase
+      .from('playlists')
+      .update({ songs: filteredSongs })
+      .eq('id', playlistId);
 
-      if (error) {
-        console.error('Gagal hapus lagu di Supabase:', error);
-        setToastMessage("Gagal mengupdate playlist.");
-        return;
-      }
-      fetchPlaylists();
-    } else {
-      const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: filteredSongs } : pl);
-      setPlaylists(updated);
-      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    if (error) {
+      console.error('Gagal hapus lagu di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal mengupdate playlist.");
+      return;
     }
+
+    // Panggil fungsi fetch data baru menggantikan fetchPlaylists()
+    fetchAllUserData();
 
     if (activePlaylistView?.id === playlistId) {
       setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
     }
-    setToastMessage("Lagu dihapus dari playlist.");
+    if (setToastMessage) setToastMessage("Lagu dihapus dari playlist.");
   };
 
   const addSongToPlaylist = async (playlistId: string) => {
     if (!songToAddToPlaylist) return;
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
 
-    const targetPl = playlists.find(p => p.id === playlistId);
+    const targetPl = playlists.find((p: any) => p.id === playlistId);
     if (!targetPl) return;
 
     if ((targetPl.songs || []).some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
-      setToastMessage("Lagu sudah ada di playlist!");
+      if (setToastMessage) setToastMessage("Lagu sudah ada di playlist!");
       return;
     }
 
     const newSongs = [...(targetPl.songs || []), songToAddToPlaylist];
-    const newAddedBy = { ...(targetPl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+    const newAddedBy = { ...(targetPl.added_by || targetPl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
 
-    if (isUuid(playlistId)) {
-      const { error } = await supabase
-        .from('playlists')
-        .update({ songs: newSongs })
-        .eq('id', playlistId);
+    const { error } = await supabase
+      .from('playlists')
+      .update({ songs: newSongs, added_by: newAddedBy })
+      .eq('id', playlistId);
 
-      if (error) {
-        console.error('Gagal tambah lagu di Supabase:', error);
-        setToastMessage("Gagal menambahkan lagu.");
-        return;
-      }
-      fetchPlaylists();
-    } else {
-      const updated = playlists.map(pl => {
-        if (pl.id === playlistId) {
-          return { ...pl, songs: newSongs, addedBy: newAddedBy };
-        }
-        return pl;
-      });
-      setPlaylists(updated);
-      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    if (error) {
+      console.error('Gagal tambah lagu di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal menambahkan lagu.");
+      return;
     }
 
-    setIsAddToPlaylistOpen(false);
-    setSongToAddToPlaylist(null);
-    setToastMessage("Lagu ditambahkan ke playlist!");
+    // Panggil fungsi fetch data baru menggantikan fetchPlaylists()
+    fetchAllUserData();
+
+    if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
+    if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
+    if (setToastMessage) setToastMessage("Lagu ditambahkan ke playlist!");
   };
   
   const openUserProfileCard = async (user: any) => {
