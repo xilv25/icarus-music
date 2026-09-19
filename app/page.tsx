@@ -300,16 +300,27 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
     fetchAllUserData();
   };
-
+    
   const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    const { error } = await supabase.from('playlists').delete().eq('id', playlistId);
-    if (!error) {
-      fetchAllUserData();
-      if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
-      if (setToastMessage) setToastMessage("Playlist berhasil dihapus.");
+    const { error } = await supabase
+      .from('playlists')
+      .delete()
+      .eq('id', playlistId);
+
+    if (error) {
+      console.error('Gagal hapus playlist di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal menghapus playlist dari server.");
+      return;
     }
+
+    fetchAllUserData();
+
+    if (activePlaylistView?.id === playlistId) {
+      setActivePlaylistView(null);
+    }
+    if (setToastMessage) setToastMessage("Playlist berhasil dihapus.");
   };
 
   const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
@@ -325,18 +336,24 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       .update({ songs: filteredSongs })
       .eq('id', playlistId);
 
-    if (!error) {
-      fetchAllUserData();
-      if (activePlaylistView?.id === playlistId) {
-        setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
-      }
-      if (setToastMessage) setToastMessage("Lagu dihapus dari playlist.");
+    if (error) {
+      console.error('Gagal hapus lagu di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal mengupdate playlist.");
+      return;
     }
+
+    fetchAllUserData();
+
+    if (activePlaylistView?.id === playlistId) {
+      setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
+    }
+    if (setToastMessage) setToastMessage("Lagu dihapus dari playlist.");
   };
 
   const addSongToPlaylist = async (playlistId: string) => {
     if (!songToAddToPlaylist) return;
 
+    const currentUserTag = username || (userEmail ? userEmail.split('@')[0] : 'User');
     const targetPl = playlists.find((p: any) => p.id === playlistId);
     if (!targetPl) return;
 
@@ -346,19 +363,27 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
 
     const newSongs = [...(targetPl.songs || []), songToAddToPlaylist];
-    const newAddedBy = { ...(targetPl.added_by || {}), [songToAddToPlaylist.videoId]: username || 'User' };
+    const newAddedBy = {
+      ...(targetPl.added_by || targetPl.addedBy || {}),
+      [songToAddToPlaylist.videoId]: currentUserTag,
+    };
 
     const { error } = await supabase
       .from('playlists')
       .update({ songs: newSongs, added_by: newAddedBy })
       .eq('id', playlistId);
 
-    if (!error) {
-      fetchAllUserData();
-      if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
-      if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
-      if (setToastMessage) setToastMessage("Lagu berhasil ditambahkan.");
+    if (error) {
+      console.error('Gagal tambah lagu di Supabase:', error);
+      if (setToastMessage) setToastMessage("Gagal menambahkan lagu.");
+      return;
     }
+
+    fetchAllUserData();
+
+    if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
+    if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
+    if (setToastMessage) setToastMessage("Lagu berhasil ditambahkan.");
   };
 
   const handleAcceptCollabRequest = async (req: any) => {
