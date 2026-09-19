@@ -57,9 +57,10 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-
+  
   // --- 2. USER PROFILE STATES ---
-  const [userId, setUserId] = useState('');
+  const [authUserId, setAuthUserId] = useState(''); // Penampung UUID asli dari Supabase Auth
+  const [userId, setUserId] = useState(''); // Penampung numeric_id untuk tampilan profil
   const [userEmail, setUserEmail] = useState('');
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState('');
@@ -144,17 +145,18 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
     // --- 1. FETCH ALL USER DATA FROM SUPABASE ---
   const fetchAllUserData = async () => {
-    if (!userId) return;
+    // Gunakan authUserId (UUID) agar sesuai dengan kolom user_id bertipe uuid di Supabase
+    if (!authUserId) return;
 
     // A. Fetch Playlists (Milik sendiri & Kolaborasi)
     const { data: playlistData, error: plError } = await supabase
       .from('playlists')
       .select('*')
-      .or(`user_id.eq.${userId},collaborator_username.eq.${username}`);
+      .or(`user_id.eq.${authUserId},collaborator_username.eq.${username}`);
 
     if (!plError && playlistData) {
       const myPlaylists = playlistData.filter(
-        (pl) => pl.user_id === userId || (pl.collaborator_username === username && pl.status === 'accepted')
+        (pl) => pl.user_id === authUserId || (pl.collaborator_username === username && pl.status === 'accepted')
       );
       setPlaylists(myPlaylists);
 
@@ -168,7 +170,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     const { data: likedData } = await supabase
       .from('liked_songs')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', authUserId);
 
     if (likedData) {
       const fullList = likedData.map((item: any) => item.song_data || item);
@@ -180,7 +182,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     const { data: historyData } = await supabase
       .from('recently_played')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', authUserId)
       .order('played_at', { ascending: false })
       .limit(20);
 
@@ -189,9 +191,9 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   };
 
-  // Trigger fetch ulang saat user/username berubah
+  // Trigger fetch ulang saat authUserId/username berubah
   useEffect(() => {
-    if (userId) {
+    if (authUserId) {
       fetchAllUserData();
     } else {
       setPlaylists([]);
@@ -200,15 +202,15 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       setLikedSongIds([]);
       setHistory([]);
     }
-  }, [userId, username]);
+  }, [authUserId, username]);
 
   // --- 2. HISTORY HANDLER ---
   const addToRecentlyPlayed = async (song: any) => {
-    if (!userId || !song) return;
+    if (!authUserId || !song) return;
 
     const { error } = await supabase.from('recently_played').insert([
       {
-        user_id: userId,
+        user_id: authUserId,
         song_data: song,
         video_id: song.videoId,
         played_at: new Date().toISOString(),
@@ -219,7 +221,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       const { data } = await supabase
         .from('recently_played')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', authUserId)
         .order('played_at', { ascending: false })
         .limit(20);
 
@@ -227,53 +229,49 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   };
 
-    // --- 3. LIKED SONGS HANDLER (SUPABASE + SAFE UI) ---
+  // --- 3. LIKED SONGS HANDLER ---
   const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation(); // Menjaga UI agar tidak menembus klik ke player
-    if (!userId || !song) return;
+    if (e) e.stopPropagation();
+    if (!authUserId || !song) return;
 
     const isLiked = likedSongsList.some((s: any) => s.videoId === song.videoId);
 
     if (isLiked) {
-      // Hapus dari Supabase
       const { error } = await supabase
         .from('liked_songs')
         .delete()
-        .eq('user_id', userId)
+        .eq('user_id', authUserId)
         .eq('video_id', song.videoId);
 
       if (!error) {
-        // Update State UI
         setLikedSongsList((prev: any[]) => prev.filter((s) => s.videoId !== song.videoId));
         setLikedSongIds((prev: any[]) => prev.filter((id) => id !== song.videoId));
         if (setToastMessage) setToastMessage("Dihapus dari Lagu yang Disukai.");
       }
     } else {
-      // Tambah ke Supabase
       const { error } = await supabase.from('liked_songs').insert([
         {
-          user_id: userId,
+          user_id: authUserId,
           video_id: song.videoId,
           song_data: song,
         },
       ]);
 
       if (!error) {
-        // Update State UI
         setLikedSongsList((prev: any[]) => [song, ...prev]);
         setLikedSongIds((prev: any[]) => [...prev, song.videoId]);
         if (setToastMessage) setToastMessage("Ditambahkan ke Lagu yang Disukai.");
       }
     }
   };
-                                            
+
   // --- 4. PLAYLIST ACTIONS ---
   const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newPlaylistName.trim() || !userId) return;
+    if (!newPlaylistName.trim() || !authUserId) return;
 
     const newPlData = {
-      user_id: userId,
+      user_id: authUserId, // UUID Auth asli ke Supabase
       name: newPlaylistName.trim(),
       owner_username: username || 'User',
       songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
