@@ -97,6 +97,7 @@ const [likedSongsList, setLikedSongsList] = useState<any[]>([]);
 const [playlists, setPlaylists] = useState<any[]>([]);
 const [activePlaylistView, setActivePlaylistView] = useState<any>(null);
 const [collabRequests, setCollabRequests] = useState<any[]>([]);
+const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
   // --- 5. MODAL STATES ---
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
@@ -840,54 +841,106 @@ const handleRejectCollabRequest = async (req: any) => {
     reader.readAsDataURL(file);
   };
 
+    // Helper cek UUID
+  const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+
   // --- PLAYLIST HANDLERS ---
-  const deletePlaylist = (playlistId: string, e?: React.MouseEvent) => {
+  const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const updated = playlists.filter(pl => pl.id !== playlistId);
-    setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+
+    if (isUuid(playlistId)) {
+      const { error } = await supabase.from('playlists').delete().eq('id', playlistId);
+      if (error) {
+        console.error('Gagal hapus playlist di Supabase:', error);
+        setToastMessage("Gagal menghapus playlist dari server.");
+        return;
+      }
+      fetchPlaylists();
+    } else {
+      const updated = playlists.filter(pl => pl.id !== playlistId);
+      setPlaylists(updated);
+      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    }
+
     if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
     setToastMessage("Playlist berhasil dihapus.");
   };
 
-  const removeSongFromPlaylist = (playlistId: string, videoId: string, e?: React.MouseEvent) => {
+  const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const updated = playlists.map(pl => {
-      if (pl.id === playlistId) {
-        const filteredSongs = pl.songs.filter((s: any) => s.videoId !== videoId);
-        return { ...pl, songs: filteredSongs };
+
+    const targetPl = playlists.find(p => p.id === playlistId);
+    if (!targetPl) return;
+
+    const filteredSongs = (targetPl.songs || []).filter((s: any) => s.videoId !== videoId);
+
+    if (isUuid(playlistId)) {
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: filteredSongs })
+        .eq('id', playlistId);
+
+      if (error) {
+        console.error('Gagal hapus lagu di Supabase:', error);
+        setToastMessage("Gagal mengupdate playlist.");
+        return;
       }
-      return pl;
-    });
-    setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+      fetchPlaylists();
+    } else {
+      const updated = playlists.map(pl => pl.id === playlistId ? { ...pl, songs: filteredSongs } : pl);
+      setPlaylists(updated);
+      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    }
+
     if (activePlaylistView?.id === playlistId) {
-      setActivePlaylistView({ ...activePlaylistView, songs: activePlaylistView.songs.filter((s: any) => s.videoId !== videoId) });
+      setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
     }
     setToastMessage("Lagu dihapus dari playlist.");
   };
 
-  const addSongToPlaylist = (playlistId: string) => {
+  const addSongToPlaylist = async (playlistId: string) => {
     if (!songToAddToPlaylist) return;
     const currentUserTag = username || userEmail.split('@')[0] || 'Anda';
-    const updated = playlists.map(pl => {
-      if (pl.id === playlistId) {
-        if (!pl.songs.some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
-          const newSongs = [...pl.songs, songToAddToPlaylist];
-          const newAddedBy = { ...(pl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+
+    const targetPl = playlists.find(p => p.id === playlistId);
+    if (!targetPl) return;
+
+    if ((targetPl.songs || []).some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+      setToastMessage("Lagu sudah ada di playlist!");
+      return;
+    }
+
+    const newSongs = [...(targetPl.songs || []), songToAddToPlaylist];
+    const newAddedBy = { ...(targetPl.addedBy || {}), [songToAddToPlaylist.videoId]: currentUserTag };
+
+    if (isUuid(playlistId)) {
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: newSongs })
+        .eq('id', playlistId);
+
+      if (error) {
+        console.error('Gagal tambah lagu di Supabase:', error);
+        setToastMessage("Gagal menambahkan lagu.");
+        return;
+      }
+      fetchPlaylists();
+    } else {
+      const updated = playlists.map(pl => {
+        if (pl.id === playlistId) {
           return { ...pl, songs: newSongs, addedBy: newAddedBy };
         }
-      }
-      return pl;
-    });
+        return pl;
+      });
+      setPlaylists(updated);
+      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
+    }
 
-    setPlaylists(updated);
-    localStorage.setItem('icarus_playlists', JSON.stringify(updated));
     setIsAddToPlaylistOpen(false);
     setSongToAddToPlaylist(null);
     setToastMessage("Lagu ditambahkan ke playlist!");
   };
-
+  
   const openUserProfileCard = async (user: any) => {
     const targetNumericId = String(user.numeric_id || user.id);
     
@@ -1067,7 +1120,7 @@ const handleRejectCollabRequest = async (req: any) => {
       
         {/* --- TAB: LIBRARY --- */}
 {activeTab === 'library' && (
-  <div className="space-y-6 mt-4 animate-fade-in">
+  <div className="space-y-6 mt-4 animate-fade-in pb-24">
     {activePlaylistView ? (
       <PlayListDetailView 
         playlist={activePlaylistView}
@@ -1081,53 +1134,38 @@ const handleRejectCollabRequest = async (req: any) => {
       />
     ) : (
       <>
+        {/* Header Tab Library */}
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-white">Koleksi Musikmu</h2>
-          <button 
-            onClick={() => setIsCreatePlaylistOpen(true)}
-            className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
-          >
-            + Buat Playlist
-          </button>
-        </div>
-
-        {/* Notifikasi Undangan Kolaborasi */}
-        {collabRequests && collabRequests.length > 0 && (
-          <div className="space-y-2 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl">
-            <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-              <svg className="w-4 h-4 fill-purple-400" viewBox="0 0 24 24">
-                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+          
+          <div className="flex items-center gap-2">
+            {/* Icon Pesan Undangan Collab */}
+            <button 
+              onClick={() => setIsCollabModalOpen(true)}
+              className="relative p-2.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-full border border-white/10 transition-all cursor-pointer flex items-center justify-center"
+              title="Undangan Kolaborasi"
+            >
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              Undangan Playlist Kolaborasi
-            </h3>
-            <div className="flex flex-col gap-2">
-              {collabRequests.map((req: any) => (
-                <div key={req.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-white font-semibold">
-                      @{req.owner_username || req.sender} mengundangmu ke <span className="text-purple-300 font-bold">"{req.name || req.playlistName}"</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400">Kalian saling follow untuk berkolaborasi.</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleAcceptCollabRequest(req)} 
-                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Setujui
-                    </button>
-                    <button 
-                      onClick={() => handleRejectCollabRequest(req)} 
-                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Tolak
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+
+              {/* Counter Badge */}
+              {collabRequests && collabRequests.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center border-2 border-black animate-pulse">
+                  {collabRequests.length}
+                </span>
+              )}
+            </button>
+
+            {/* Tombol Buat Playlist */}
+            <button 
+              onClick={() => setIsCreatePlaylistOpen(true)}
+              className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
+            >
+              + Buat Playlist
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Liked Songs Entry */}
         <div 
@@ -1186,19 +1224,21 @@ const handleRejectCollabRequest = async (req: any) => {
         </div>
 
         {/* Listening History */}
-        <div className="space-y-3 pt-4">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terakhir Diputar</h3>
-          <div className="flex flex-col gap-2">
-            {history.slice(0, historyDisplayLimit).map((song: any, idx: number) => (
-              <SongItem 
-                key={idx}
-                song={song}
-                onPlay={() => playSong(song, history, idx)}
-                onMenuOpen={(s) => { setSelectedSongForMenu(s); setIsMenuOpen(true); }}
-              />
-            ))}
+        {history && history.length > 0 && (
+          <div className="space-y-3 pt-4">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terakhir Diputar</h3>
+            <div className="flex flex-col gap-2">
+              {history.slice(0, historyDisplayLimit).map((song: any, idx: number) => (
+                <SongItem 
+                  key={idx}
+                  song={song}
+                  onPlay={() => playSong(song, history, idx)}
+                  onMenuOpen={(s: any) => { setSelectedSongForMenu(s); setIsMenuOpen(true); }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </>
     )}
   </div>
@@ -1278,6 +1318,17 @@ const handleRejectCollabRequest = async (req: any) => {
           type="following"
           onAction={(id) => unfollowFromList(id)}
           emptyText="Belum mengikuti siapapun."
+        />
+      )}
+
+        {/* Modal Undangan Kolaborasi */}
+      {isCollabModalOpen && (
+        <CollabRequestsModal
+          isOpen={isCollabModalOpen}
+          onClose={() => setIsCollabModalOpen(false)}
+          collabRequests={collabRequests}
+          onAccept={handleAcceptCollabRequest}
+          onReject={handleRejectCollabRequest}
         />
       )}
 
@@ -1428,27 +1479,33 @@ const handleRejectCollabRequest = async (req: any) => {
       )}
       
       {/* Bottom Navigation Bar */}
-      <div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2 border-t border-white/5">
-        <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-          <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          <span className="text-[10px] font-medium">Home</span>
-        </div>
+<div className="fixed bottom-0 w-full h-[64px] bg-gradient-to-t from-black via-black/95 to-black/80 px-6 flex items-center justify-between z-40 pb-2 border-t border-white/5">
+  <div onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'home' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+    <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" strokeWidth={activeTab === 'home' ? "0" : "2"} viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+    <span className="text-[10px] font-medium">Home</span>
+  </div>
 
-        <div onClick={() => { setActiveTab('search'); setIsFullScreenSearch(false); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'search' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'search' ? "3" : "2"} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <span className="text-[10px] font-medium">Search</span>
-        </div>
+  <div onClick={() => { setActiveTab('search'); setIsFullScreenSearch(false); }} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'search' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'search' ? "3" : "2"} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <span className="text-[10px] font-medium">Search</span>
+  </div>
 
-        <div onClick={() => setActiveTab('library')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'library' ? "3" : "2"} viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h13.4a.5.5 0 0 1 .49.6l-1 5.2a.5.5 0 0 1-.49.4h-1.4"></path><path d="M4 19a2 2 0 0 0 2 2h14"></path><path d="M4 19h14"></path><path d="M8 12h8"></path><path d="M8 16h6"></path></svg>
-          <span className="text-[10px] font-medium">Library</span>
-        </div>
+  {/* Library dengan Titik Merah Notifikasi */}
+  <div onClick={() => setActiveTab('library')} className={`relative flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'library' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+    <div className="relative">
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={activeTab === 'library' ? "3" : "2"} viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h13.4a.5.5 0 0 1 .49.6l-1 5.2a.5.5 0 0 1-.49.4h-1.4"></path><path d="M4 19a2 2 0 0 0 2 2h14"></path><path d="M4 19h14"></path><path d="M8 12h8"></path><path d="M8 16h6"></path></svg>
+      {collabRequests && collabRequests.length > 0 && (
+        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-black animate-pulse" />
+      )}
+    </div>
+    <span className="text-[10px] font-medium">Library</span>
+  </div>
 
-        <div onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-          <span className="text-[10px] font-medium">Profile</span>
-        </div>
-      </div>
+  <div onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    <span className="text-[10px] font-medium">Profile</span>
+  </div>
+</div>
     </div>
   );
 }
