@@ -42,7 +42,10 @@ jobs:
           # 1. Tambahkan platform Android
           npx cap add android
 
-          # 2. Timpa file bawaan dengan kode custom background player kita dari folder native-source
+          # 2. HAPUS MainActivity.java bawaan Capacitor agar tidak konflik dengan kode Kotlin kita
+          rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
+
+          # 3. Timpa file dengan kode custom background player kita dari folder native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
