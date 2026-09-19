@@ -4,6 +4,10 @@
   "webDir": "out",
   "server": {
     "url": "https://icarus-music-git-main-rikzs-projects.vercel.app",
-    "cleartext": true
+    "cleartext": true,
+    "allowNavigation": [
+      "icarus-music-git-main-rikzs-projects.vercel.app",
+      "*.vercel.app"
+    ]
   }
 }
