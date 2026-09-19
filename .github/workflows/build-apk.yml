@@ -32,11 +32,17 @@ jobs:
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Prepare Assets & Add Android Platform
+      - name: Prepare Assets & Generate App Icon
         run: |
           mkdir -p out
           npx cap add android || true
           mkdir -p android/app/src/main/assets
+          
+          # Otomatis generate ikon jika folder resources dan icon.jpg/.png tersedia
+          if [ -d "resources" ]; then
+            npx capacitor-assets generate || true
+          fi
+          
           npx cap sync android
 
       - name: Inject Background Playback Permissions
