@@ -19,6 +19,12 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
       - name: Install Dependencies
         run: npm install
 
@@ -36,12 +42,6 @@ jobs:
       - name: Fix Duplicate Kotlin Dependencies
         run: |
           echo "android { configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
 
       - name: Build Android APK
         run: |
