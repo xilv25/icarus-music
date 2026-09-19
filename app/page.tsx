@@ -176,7 +176,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       setLikedSongIds(likedData.map((item: any) => item.video_id));
     }
 
-    // C. Fetch History (Terakhir Diputar) dari Supabase
+    // C. Fetch History / Terakhir Diputar dari Supabase
     const { data: historyData } = await supabase
       .from('recently_played')
       .select('*')
@@ -189,7 +189,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   };
 
-  // Trigger fetch ulang & reset state saat user/username berubah
+  // Trigger fetch ulang saat user/username berubah
   useEffect(() => {
     if (userId) {
       fetchAllUserData();
@@ -202,7 +202,67 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   }, [userId, username]);
 
-  // --- 2. HANDLERS (PLAYLIST & COLLAB) ---
+  // --- 2. HISTORY HANDLER ---
+  const addToRecentlyPlayed = async (song: any) => {
+    if (!userId || !song) return;
+
+    const { error } = await supabase.from('recently_played').insert([
+      {
+        user_id: userId,
+        song_data: song,
+        video_id: song.videoId,
+        played_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (!error) {
+      const { data } = await supabase
+        .from('recently_played')
+        .select('*')
+        .eq('user_id', userId)
+        .order('played_at', { ascending: false })
+        .limit(20);
+
+      if (data) setHistory(data.map((item: any) => item.song_data || item));
+    }
+  };
+
+  // --- 3. LIKED SONGS HANDLER ---
+  const toggleLikeSong = async (song: any) => {
+    if (!userId || !song) return;
+
+    const isLiked = likedSongsList.some((s: any) => s.videoId === song.videoId);
+
+    if (isLiked) {
+      const { error } = await supabase
+        .from('liked_songs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('video_id', song.videoId);
+
+      if (!error) {
+        setLikedSongsList((prev: any[]) => prev.filter((s) => s.videoId !== song.videoId));
+        setLikedSongIds((prev: any[]) => prev.filter((id) => id !== song.videoId));
+        if (setToastMessage) setToastMessage("Dihapus dari Lagu yang Disukai.");
+      }
+    } else {
+      const { error } = await supabase.from('liked_songs').insert([
+        {
+          user_id: userId,
+          video_id: song.videoId,
+          song_data: song,
+        },
+      ]);
+
+      if (!error) {
+        setLikedSongsList((prev: any[]) => [song, ...prev]);
+        setLikedSongIds((prev: any[]) => [...prev, song.videoId]);
+        if (setToastMessage) setToastMessage("Ditambahkan ke Lagu yang Disukai.");
+      }
+    }
+  };
+
+  // --- 4. PLAYLIST ACTIONS ---
   const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newPlaylistName.trim() || !userId) return;
@@ -225,7 +285,6 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       return;
     }
 
-    // Reset Form & Tutup Modal
     setIsCreatePlaylistOpen(false);
     setNewPlaylistName('');
     setCollaboratorUsername('');
@@ -235,6 +294,66 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
 
     fetchAllUserData();
+  };
+
+  const deletePlaylist = async (playlistId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const { error } = await supabase.from('playlists').delete().eq('id', playlistId);
+    if (!error) {
+      fetchAllUserData();
+      if (activePlaylistView?.id === playlistId) setActivePlaylistView(null);
+      if (setToastMessage) setToastMessage("Playlist berhasil dihapus.");
+    }
+  };
+
+  const removeSongFromPlaylist = async (playlistId: string, videoId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const targetPl = playlists.find((p: any) => p.id === playlistId);
+    if (!targetPl) return;
+
+    const filteredSongs = (targetPl.songs || []).filter((s: any) => s.videoId !== videoId);
+
+    const { error } = await supabase
+      .from('playlists')
+      .update({ songs: filteredSongs })
+      .eq('id', playlistId);
+
+    if (!error) {
+      fetchAllUserData();
+      if (activePlaylistView?.id === playlistId) {
+        setActivePlaylistView({ ...activePlaylistView, songs: filteredSongs });
+      }
+      if (setToastMessage) setToastMessage("Lagu dihapus dari playlist.");
+    }
+  };
+
+  const addSongToPlaylist = async (playlistId: string) => {
+    if (!songToAddToPlaylist) return;
+
+    const targetPl = playlists.find((p: any) => p.id === playlistId);
+    if (!targetPl) return;
+
+    if ((targetPl.songs || []).some((s: any) => s.videoId === songToAddToPlaylist.videoId)) {
+      if (setToastMessage) setToastMessage("Lagu sudah ada di playlist!");
+      return;
+    }
+
+    const newSongs = [...(targetPl.songs || []), songToAddToPlaylist];
+    const newAddedBy = { ...(targetPl.added_by || {}), [songToAddToPlaylist.videoId]: username || 'User' };
+
+    const { error } = await supabase
+      .from('playlists')
+      .update({ songs: newSongs, added_by: newAddedBy })
+      .eq('id', playlistId);
+
+    if (!error) {
+      fetchAllUserData();
+      if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
+      if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
+      if (setToastMessage) setToastMessage("Lagu berhasil ditambahkan.");
+    }
   };
 
   const handleAcceptCollabRequest = async (req: any) => {
@@ -261,7 +380,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   };
 
-  // --- 3. INITIALIZATION EFFECTS ---
+  // --- 5. INITIALIZATION EFFECTS ---
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -310,7 +429,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
-  
+    
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
