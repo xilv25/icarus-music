@@ -169,48 +169,39 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     fetchPlaylists();
   }, [userId, username]);
 
-      const handleCreatePlaylist = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!newPlaylistName.trim()) return;
+const handleCreatePlaylist = async (e?: React.FormEvent) => {
+  if (e) e.preventDefault();
+  if (!newPlaylistName.trim() || !userId) return;
 
-    // Cek apakah userId berbentuk UUID valid (untuk Supabase)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId));
+  const newPlData = {
+    user_id: userId,
+    name: newPlaylistName.trim(),
+    owner_username: username || 'User',
+    songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
+    is_collaborative: isCollaborativePlaylist,
+    collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
+    status: isCollaborativePlaylist ? 'pending' : 'accepted',
+  };
 
-    const newPlData = {
-      name: newPlaylistName.trim(),
-      owner_username: username || 'User',
-      songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
-      is_collaborative: isCollaborativePlaylist,
-      collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
-      status: isCollaborativePlaylist ? 'pending' : 'accepted',
-    };
+  const { error } = await supabase.from('playlists').insert([newPlData]);
 
-    if (isUuid) {
-      // 1. SIMPAN KE SUPABASE (Jika Login Resmi)
-      const { data, error } = await supabase
-        .from('playlists')
-        .insert([{ ...newPlData, user_id: userId }])
-        .select()
-        .single();
+  if (error) {
+    console.error('Error insert playlist Supabase:', error);
+    if (setToastMessage) setToastMessage('Gagal menyimpan playlist!');
+    return;
+  }
 
-      if (error) {
-        console.error('Error insert playlist Supabase:', error);
-        if (setToastMessage) setToastMessage('Gagal menyimpan ke server Supabase!');
-        return;
-      }
+  // Reset Form & Fetch Ulang Data
+  setIsCreatePlaylistOpen(false);
+  setNewPlaylistName('');
+  setCollaboratorUsername('');
+  setIsCollaborativePlaylist(false);
+  if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
+  if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
+  if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
 
-      fetchPlaylists();
-    } else {
-      // 2. SIMPAN KE LOCALSTORAGE (Jika Guest / ID Lokal)
-      const localPl = {
-        id: Date.now().toString(),
-        ...newPlData,
-        user_id: userId,
-      };
-      const updated = [...playlists, localPl];
-      setPlaylists(updated);
-      localStorage.setItem('icarus_playlists', JSON.stringify(updated));
-    }
+  fetchAllUserData();
+};
 
     // Reset Form & Tutup Modal
     setIsCreatePlaylistOpen(false);
