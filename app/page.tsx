@@ -299,10 +299,20 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   // --- 4. PLAYLIST ACTIONS ---
     const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newPlaylistName.trim() || !authUserId) return;
+    
+    // Cek apakah authUserId kosong
+    if (!authUserId) {
+      alert("User ID tidak ditemukan. Silakan login ulang.");
+      return;
+    }
+
+    if (!newPlaylistName.trim()) {
+      alert("Nama playlist tidak boleh kosong.");
+      return;
+    }
 
     const newPlData = {
-      user_id: authUserId,
+      user_id: String(authUserId),
       name: newPlaylistName.trim(),
       owner_username: username || 'User',
       songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
@@ -311,22 +321,24 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       status: isCollaborativePlaylist ? 'pending' : 'accepted',
     };
 
-    const { error } = await supabase.from('playlists').insert([newPlData]);
+    const { data, error } = await supabase.from('playlists').insert([newPlData]).select();
 
     if (error) {
-      console.error('Error insert playlist Supabase:', error);
-      if (setToastMessage) setToastMessage('Gagal menyimpan playlist!');
+      // Cetak error mendalam di console dan alert
+      console.error('Detail Error Supabase:', error);
+      alert(`Gagal membuat playlist: ${error.message} (${error.code})`);
       return;
     }
 
+    // Reset Form jika berhasil
     setIsCreatePlaylistOpen(false);
     setNewPlaylistName('');
     setCollaboratorUsername('');
     setIsCollaborativePlaylist(false);
     if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
     if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
-    if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
-
+    
+    alert('Playlist berhasil dibuat!');
     fetchAllUserData();
   };
     
