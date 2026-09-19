@@ -227,13 +227,15 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   };
 
-  // --- 3. LIKED SONGS HANDLER ---
-  const toggleLikeSong = async (song: any) => {
+    // --- 3. LIKED SONGS HANDLER (SUPABASE + SAFE UI) ---
+  const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // Menjaga UI agar tidak menembus klik ke player
     if (!userId || !song) return;
 
     const isLiked = likedSongsList.some((s: any) => s.videoId === song.videoId);
 
     if (isLiked) {
+      // Hapus dari Supabase
       const { error } = await supabase
         .from('liked_songs')
         .delete()
@@ -241,11 +243,13 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
         .eq('video_id', song.videoId);
 
       if (!error) {
+        // Update State UI
         setLikedSongsList((prev: any[]) => prev.filter((s) => s.videoId !== song.videoId));
         setLikedSongIds((prev: any[]) => prev.filter((id) => id !== song.videoId));
         if (setToastMessage) setToastMessage("Dihapus dari Lagu yang Disukai.");
       }
     } else {
+      // Tambah ke Supabase
       const { error } = await supabase.from('liked_songs').insert([
         {
           user_id: userId,
@@ -255,13 +259,14 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       ]);
 
       if (!error) {
+        // Update State UI
         setLikedSongsList((prev: any[]) => [song, ...prev]);
         setLikedSongIds((prev: any[]) => [...prev, song.videoId]);
         if (setToastMessage) setToastMessage("Ditambahkan ke Lagu yang Disukai.");
       }
     }
   };
-
+                                            
   // --- 4. PLAYLIST ACTIONS ---
   const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -729,28 +734,6 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     if (playerRef.current) {
       playerRef.current.seekTo(pos, 'fraction');
     }
-  };
-
-  const toggleLikeSong = (song: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const id = song.videoId;
-    let updatedIds = [...likedSongIds];
-    let updatedList = [...likedSongsList];
-
-    if (updatedIds.includes(id)) {
-      updatedIds = updatedIds.filter(i => i !== id);
-      updatedList = updatedList.filter(s => s.videoId !== id);
-      setToastMessage("Dihapus dari Liked Songs");
-    } else {
-      updatedIds.push(id);
-      updatedList.unshift(song);
-      setToastMessage("Ditambahkan ke Liked Songs");
-    }
-
-    setLikedSongIds(updatedIds);
-    setLikedSongsList(updatedList);
-    localStorage.setItem('icarus_liked_ids', JSON.stringify(updatedIds));
-    localStorage.setItem('icarus_liked_full', JSON.stringify(updatedList));
   };
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
