@@ -25,6 +25,8 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ReactPlayer = dynamic(() => import('react-player/youtube'), { ssr: false });
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://icarusmusic.web.id';
+
 
 // --- HELPER FUNCTIONS ---
 const formatTime = (seconds: number) => {
@@ -536,18 +538,18 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   }, [activeLineIndex, isLyricsExpanded]);
 
   // --- API & DATA FETCHING HANDLERS ---
-  const loadHomepageData = async () => {
+    const loadHomepageData = async () => {
     setIsLoading(true);
     try {
-      const res1 = await fetch(`/api/search?q=Global Viral Hits 2026`);
+      const res1 = await fetch(`${API_BASE}/api/search?q=Global Viral Hits 2026`);
       const json1 = await res1.json();
       if (json1.status === 'success') setSuggestions(json1.data.slice(0, 15));
 
-      const res2 = await fetch(`/api/search?q=Trending Chill Mix Vibes`);
+      const res2 = await fetch(`${API_BASE}/api/search?q=Trending Chill Mix Vibes`);
       const json2 = await res2.json();
       if (json2.status === 'success') setRandomSongs(json2.data.slice(0, 20));
 
-      const res3 = await fetch(`/api/search?q=Top Chart Trending Songs`);
+      const res3 = await fetch(`${API_BASE}/api/search?q=Top Chart Trending Songs`);
       const json3 = await res3.json();
       if (json3.status === 'success') setTrendSongs(json3.data.slice(0, 15));
     } catch (e) {
@@ -737,7 +739,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     setUserSearchResults([]);
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}`);
       const json = await res.json();
       if (json.status === 'success') {
         setSearchResults(json.data);
@@ -746,7 +748,6 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       console.error(e);
     }
     setIsLoading(false);
-  };
 
   // --- MUSIC & PLAYBACK CONTROLLERS ---
   const playSong = (song: any, queue: any[] = [], index: number = 0) => {
