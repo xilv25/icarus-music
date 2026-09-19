@@ -28,13 +28,20 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Ensure Capacitor Config
+      - name: Configure Capacitor
         run: |
-          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            echo '{"appId":"com.icarus.music","appName":"Icarus Music","webDir":"out"}' > capacitor.config.json
-          fi
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "com.icarus.music",
+            "appName": "Icarus Music",
+            "webDir": "out",
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
 
-      - name: Build Next.js Web App
+      - name: Build Web App
         run: |
           npm run build || true
           mkdir -p out
@@ -42,46 +49,31 @@ jobs:
             echo "<!DOCTYPE html><html><head><title>Icarus Music</title></head><body><div id='root'>Icarus Music</div></body></html>" > out/index.html
           fi
 
-      - name: Generate Fresh Android Project & Inject Custom Code
+      - name: Setup Native Android Project
         run: |
-          # 1. Hapus total folder android & cache lama agar bersih
           rm -rf android
-
-          # 2. Tambahkan platform Android dari awal
           npx cap add android
 
-          # 3. Hapus MainActivity bawaan agar tidak konflik
-          rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
-          rm -f android/app/src/main/java/com/icarus/music/MainActivity.kt
-          rm -rf android/app/src/main/java/com/example
-
-          # 4. Timpa file dengan kode custom dari native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
+            rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
+            rm -f android/app/src/main/java/com/icarus/music/MainActivity.kt
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
             cp -f native-source/MusicService.kt android/app/src/main/java/com/icarus/music/
             cp -f native-source/AndroidManifest.xml android/app/src/main/
           fi
 
-          # 5. Sinkronisasi project
           npx cap sync android
 
-      - name: Configure Gradle Package & Exclusions
-        run: |
-          echo "android { namespace 'com.icarus.music' }" >> android/app/build.gradle
-          echo "android { defaultConfig { applicationId 'com.icarus.music' } }" >> android/app/build.gradle
-          echo "android { configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' } }" >> android/app/build.gradle
-
-      - name: Build Android APK (Clean Build)
+      - name: Build Android APK
         run: |
           cd android
           chmod +x gradlew
-          # Menjalankan gradlew clean dan assembleDebug
           ./gradlew clean assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: IcarusMusic-Release-APK
+          name: IcarusMusic-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           
