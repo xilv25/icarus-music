@@ -144,11 +144,10 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
     // --- 1. FETCH ALL USER DATA FROM SUPABASE ---
-  const fetchAllUserData = async () => {
-    // Gunakan authUserId (UUID) agar sesuai dengan kolom user_id bertipe uuid di Supabase
+    const fetchAllUserData = async () => {
     if (!authUserId) return;
 
-    // A. Fetch Playlists (Milik sendiri & Kolaborasi)
+    // A. Fetch Playlists
     const { data: playlistData, error: plError } = await supabase
       .from('playlists')
       .select('*')
@@ -166,7 +165,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       setCollabRequests(pendingRequests);
     }
 
-    // B. Fetch Liked Songs dari Supabase
+    // B. Fetch Liked Songs (Ambil videoId dari dalam JSON song_data)
     const { data: likedData } = await supabase
       .from('liked_songs')
       .select('*')
@@ -175,10 +174,14 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     if (likedData) {
       const fullList = likedData.map((item: any) => item.song_data || item);
       setLikedSongsList(fullList);
-      setLikedSongIds(likedData.map((item: any) => item.video_id));
+      setLikedSongIds(
+        likedData
+          .map((item: any) => item.song_data?.videoId || item.videoId)
+          .filter(Boolean)
+      );
     }
 
-    // C. Fetch History / Terakhir Diputar dari Supabase
+    // C. Fetch History
     const { data: historyData } = await supabase
       .from('recently_played')
       .select('*')
@@ -190,7 +193,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       setHistory(historyData.map((item: any) => item.song_data || item));
     }
   };
-
+  
   // Trigger fetch ulang saat authUserId/username berubah
   useEffect(() => {
     if (authUserId) {
@@ -230,29 +233,44 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   };
 
   // --- 3. LIKED SONGS HANDLER ---
-  const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
+    const toggleLikeSong = async (song: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!authUserId || !song) return;
 
     const isLiked = likedSongsList.some((s: any) => s.videoId === song.videoId);
 
     if (isLiked) {
+      // Hapus menggunakan filter JSONB song_data->>videoId
       const { error } = await supabase
         .from('liked_songs')
         .delete()
         .eq('user_id', authUserId)
-        .eq('video_id', song.videoId);
+        .filter('song_data->>videoId', 'eq', song.videoId);
 
       if (!error) {
         setLikedSongsList((prev: any[]) => prev.filter((s) => s.videoId !== song.videoId));
         setLikedSongIds((prev: any[]) => prev.filter((id) => id !== song.videoId));
+
+        // Update langsung tampilan halaman detail Lagu yang Disukai jika sedang terbuka
+        setActivePlaylistView((prev: any) => {
+          if (prev && (prev.isLikedSongs || prev.id === 'liked')) {
+            return {
+              ...prev,
+              songs: (prev.songs || []).filter((s: any) => s.videoId !== song.videoId),
+            };
+          }
+          return prev;
+        });
+
         if (setToastMessage) setToastMessage("Dihapus dari Lagu yang Disukai.");
+      } else {
+        console.error("Gagal menghapus favorit:", error);
       }
     } else {
+      // Simpan lagu ke kolom song_data
       const { error } = await supabase.from('liked_songs').insert([
         {
           user_id: authUserId,
-          video_id: song.videoId,
           song_data: song,
         },
       ]);
@@ -260,18 +278,31 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
       if (!error) {
         setLikedSongsList((prev: any[]) => [song, ...prev]);
         setLikedSongIds((prev: any[]) => [...prev, song.videoId]);
+
+        setActivePlaylistView((prev: any) => {
+          if (prev && (prev.isLikedSongs || prev.id === 'liked')) {
+            return {
+              ...prev,
+              songs: [song, ...(prev.songs || [])],
+            };
+          }
+          return prev;
+        });
+
         if (setToastMessage) setToastMessage("Ditambahkan ke Lagu yang Disukai.");
+      } else {
+        console.error("Gagal menyukai lagu:", error);
       }
     }
   };
 
   // --- 4. PLAYLIST ACTIONS ---
-  const handleCreatePlaylist = async (e?: React.FormEvent) => {
+    const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newPlaylistName.trim() || !authUserId) return;
 
     const newPlData = {
-      user_id: authUserId, // UUID Auth asli ke Supabase
+      user_id: authUserId,
       name: newPlaylistName.trim(),
       owner_username: username || 'User',
       songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
