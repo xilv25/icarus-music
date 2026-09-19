@@ -848,6 +848,27 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
   }, [currentTrack]);
 
+          // Trik Silent Audio Keep-Alive untuk Mobile Background Playback
+  useEffect(() => {
+    let silentAudio: HTMLAudioElement | null = null;
+
+    if (isPlaying) {
+      // Menggunakan file audio hening 1 detik yang di-loop
+      silentAudio = new Audio('https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3');
+      silentAudio.loop = true;
+      silentAudio.play().catch(() => {
+        // Autoplay terblokir browser jika belum ada interaksi pengguna
+      });
+    }
+
+    return () => {
+      if (silentAudio) {
+        silentAudio.pause();
+        silentAudio = null;
+      }
+    };
+  }, [isPlaying]);
+
   // --- HELPER RENDER AVATAR ---
   const renderAvatar = (customClass = "w-8 h-8 text-xs font-bold", overridePic?: string, overrideUsername?: string) => {
     const picToUse = overridePic !== undefined ? overridePic : profilePic;
@@ -1115,19 +1136,24 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
         </div>
       )}
 
-            {/* Hidden React Player for YouTube Audio/Video Streaming */}
+       {/* Hidden React Player for YouTube Audio/Video Streaming */}
       {currentTrack && (
         <div className="fixed -top-[200%] -left-[200%] w-0 h-0 opacity-0 pointer-events-none">
           <ReactPlayer
             ref={playerRef}
             url={`https://www.youtube.com/watch?v=${currentTrack.videoId}`}
             playing={isPlaying}
-            onEnded={handleEnded} // <-- TAMBAHAN DI SINI (auto play lagu berikutnya)
+            onEnded={handleEnded}
             onReady={() => setIsBuffering(false)}
             onBuffer={() => setIsBuffering(true)}
             onBufferEnd={() => setIsBuffering(false)}
             onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
+            onPause={() => {
+              // Mencegah lagu otomatis berhenti saat Chrome di-minimize di HP
+              if (document.visibilityState === 'visible') {
+                setIsPlaying(false);
+              }
+            }}
             onProgress={({ played, playedSeconds }) => {
               if (!isSeekingRef.current) {
                 setPlayedProgress(played);
