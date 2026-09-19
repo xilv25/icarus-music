@@ -14,12 +14,14 @@
         android:label="Icarus Music"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.NoActionBar">
+        android:theme="@style/AppTheme.NoActionBar">
 
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
-            android:configChanges="orientation|keyboardHidden|screenSize">
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
