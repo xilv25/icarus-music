@@ -3,11 +3,12 @@
   "appName": "Icarus Music",
   "webDir": "out",
   "server": {
-    "url": "https://icarus-music-git-main-rikzs-projects.vercel.app",
+    "url": "https://icarus-music-xi.vercel.app",
     "cleartext": true,
     "allowNavigation": [
-      "icarus-music-git-main-rikzs-projects.vercel.app",
-      "*.vercel.app"
+      "icarus-music-xi.vercel.app",
+      "*.vercel.app",
+      "*"
     ]
   }
 }
