@@ -1141,7 +1141,7 @@ useEffect(() => {
         </div>
       )}
 
-       {/* Hidden React Player for YouTube Audio/Video Streaming */}
+      {/* Hidden React Player for YouTube Audio/Video Streaming */}
       {currentTrack && (
         <div className="fixed -top-[200%] -left-[200%] w-[1px] h-[1px] opacity-0 pointer-events-none">
           <ReactPlayer
@@ -1154,16 +1154,16 @@ useEffect(() => {
             onBufferEnd={() => setIsBuffering(false)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => {
-  // Jika YouTube mencoba memaksa pause saat aplikasi di-minimize/background
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-    // Paksa pemutar YouTube untuk resume/putar balik di background
-    setTimeout(() => {
-      playerRef.current?.getInternalPlayer()?.playVideo?.();
-    }, 100);
-  } else {
-    setIsPlaying(false);
-  }
-}}
+              // Jika YouTube mencoba memaksa pause saat aplikasi di-minimize/background
+              if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                // Paksa pemutar YouTube untuk resume/putar balik di background
+                setTimeout(() => {
+                  playerRef.current?.getInternalPlayer()?.playVideo?.();
+                }, 100);
+              } else {
+                setIsPlaying(false);
+              }
+            }}
             onProgress={({ played, playedSeconds }) => {
               if (!isSeekingRef.current) {
                 setPlayedProgress(played);
@@ -1180,7 +1180,7 @@ useEffect(() => {
                   playsinline: 1,
                 },
               },
-            }}
+            } as any}
           />
         </div>
       )}
