@@ -31,8 +31,9 @@ jobs:
           rm -rf android/app/src/main/assets/public
           rm -rf android/app/build android/.gradle
 
+      # ✍️ PAKAI npm install SUPAYA TIDAK BUTUH package-lock.json
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Next.js Web App
         env:
