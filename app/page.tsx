@@ -772,27 +772,26 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     setIsPlaying(!isPlaying);
   };
 
-  const handleNext = () => {
-  if (currentQueue.length === 0) return;
+    const handleNext = () => {
+    if (currentQueue.length === 0) return;
 
-  let nextIndex = currentIndex + 1;
+    let nextIndex = currentIndex + 1;
 
-  if (isShuffle) {
-    if (currentQueue.length > 1) {
-      // Cari index acak yang tidak sama dengan lagu saat ini
-      do {
-        nextIndex = Math.floor(Math.random() * currentQueue.length);
-      } while (nextIndex === currentIndex);
-    } else {
+    if (isShuffle) {
+      if (currentQueue.length > 1) {
+        do {
+          nextIndex = Math.floor(Math.random() * currentQueue.length);
+        } while (nextIndex === currentIndex);
+      } else {
+        nextIndex = 0;
+      }
+    } else if (nextIndex >= currentQueue.length) {
       nextIndex = 0;
     }
-  } else if (nextIndex >= currentQueue.length) {
-    nextIndex = 0; // Kembali ke awal antrean jika sudah di ujung
-  }
 
-  setCurrentIndex(nextIndex);
-  playSong(currentQueue[nextIndex], currentQueue, nextIndex);
-};
+    setCurrentIndex(nextIndex);
+    playSong(currentQueue[nextIndex], currentQueue, nextIndex);
+  };
 
   const handlePrev = () => {
     if (currentQueue.length === 0) return;
@@ -802,6 +801,18 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
     }
     setCurrentIndex(prevIndex);
     playSong(currentQueue[prevIndex], currentQueue, prevIndex);
+  };
+
+  // TAMBAHAN: Fungsi penangan saat lagu selesai diputar
+  const handleEnded = () => {
+    if (isRepeat === 'one') {
+      if (playerRef.current) {
+        playerRef.current.seekTo(0);
+      }
+      setIsPlaying(true);
+    } else {
+      handleNext();
+    }
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -815,7 +826,7 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
-    // MediaSession API untuk background playback & tombol media
+  // MediaSession API untuk background playback & tombol media
   useEffect(() => {
     if (currentTrack && 'mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
