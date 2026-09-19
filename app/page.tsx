@@ -142,66 +142,88 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const lyricContainerRef = useRef<HTMLDivElement>(null);
   const activeLyricRef = useRef<HTMLDivElement>(null);
 
-    const fetchPlaylists = async () => {
+    // --- 1. FETCH ALL USER DATA FROM SUPABASE ---
+  const fetchAllUserData = async () => {
     if (!userId) return;
 
-    const { data, error } = await supabase
+    // A. Fetch Playlists (Milik sendiri & Kolaborasi)
+    const { data: playlistData, error: plError } = await supabase
       .from('playlists')
       .select('*')
       .or(`user_id.eq.${userId},collaborator_username.eq.${username}`);
 
-    if (!error && data) {
-      // Playlist utama kamu (milik sendiri & kolaborasi yang disetujui)
-      const myPlaylists = data.filter(
+    if (!plError && playlistData) {
+      const myPlaylists = playlistData.filter(
         (pl) => pl.user_id === userId || (pl.collaborator_username === username && pl.status === 'accepted')
       );
       setPlaylists(myPlaylists);
 
-      // Permintaan kolaborasi yang butuh persetujuan kamu (status: pending & kamu diajak)
-      const pendingRequests = data.filter(
+      const pendingRequests = playlistData.filter(
         (pl) => pl.collaborator_username === username && pl.status === 'pending'
       );
       setCollabRequests(pendingRequests);
     }
+
+    // B. Fetch Liked Songs dari Supabase
+    const { data: likedData } = await supabase
+      .from('liked_songs')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (likedData) {
+      const fullList = likedData.map((item: any) => item.song_data || item);
+      setLikedSongsList(fullList);
+      setLikedSongIds(likedData.map((item: any) => item.video_id));
+    }
+
+    // C. Fetch History (Terakhir Diputar) dari Supabase
+    const { data: historyData } = await supabase
+      .from('recently_played')
+      .select('*')
+      .eq('user_id', userId)
+      .order('played_at', { ascending: false })
+      .limit(20);
+
+    if (historyData) {
+      setHistory(historyData.map((item: any) => item.song_data || item));
+    }
   };
 
+  // Trigger fetch ulang & reset state saat user/username berubah
   useEffect(() => {
-    fetchPlaylists();
+    if (userId) {
+      fetchAllUserData();
+    } else {
+      setPlaylists([]);
+      setCollabRequests([]);
+      setLikedSongsList([]);
+      setLikedSongIds([]);
+      setHistory([]);
+    }
   }, [userId, username]);
 
-const handleCreatePlaylist = async (e?: React.FormEvent) => {
-  if (e) e.preventDefault();
-  if (!newPlaylistName.trim() || !userId) return;
+  // --- 2. HANDLERS (PLAYLIST & COLLAB) ---
+  const handleCreatePlaylist = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newPlaylistName.trim() || !userId) return;
 
-  const newPlData = {
-    user_id: userId,
-    name: newPlaylistName.trim(),
-    owner_username: username || 'User',
-    songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
-    is_collaborative: isCollaborativePlaylist,
-    collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
-    status: isCollaborativePlaylist ? 'pending' : 'accepted',
-  };
+    const newPlData = {
+      user_id: userId,
+      name: newPlaylistName.trim(),
+      owner_username: username || 'User',
+      songs: songToAddToPlaylist ? [songToAddToPlaylist] : [],
+      is_collaborative: isCollaborativePlaylist,
+      collaborator_username: isCollaborativePlaylist ? collaboratorUsername : null,
+      status: isCollaborativePlaylist ? 'pending' : 'accepted',
+    };
 
-  const { error } = await supabase.from('playlists').insert([newPlData]);
+    const { error } = await supabase.from('playlists').insert([newPlData]);
 
-  if (error) {
-    console.error('Error insert playlist Supabase:', error);
-    if (setToastMessage) setToastMessage('Gagal menyimpan playlist!');
-    return;
-  }
-
-  // Reset Form & Fetch Ulang Data
-  setIsCreatePlaylistOpen(false);
-  setNewPlaylistName('');
-  setCollaboratorUsername('');
-  setIsCollaborativePlaylist(false);
-  if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
-  if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
-  if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
-
-  fetchAllUserData();
-};
+    if (error) {
+      console.error('Error insert playlist Supabase:', error);
+      if (setToastMessage) setToastMessage('Gagal menyimpan playlist!');
+      return;
+    }
 
     // Reset Form & Tutup Modal
     setIsCreatePlaylistOpen(false);
@@ -211,33 +233,35 @@ const handleCreatePlaylist = async (e?: React.FormEvent) => {
     if (setIsAddToPlaylistOpen) setIsAddToPlaylistOpen(false);
     if (setSongToAddToPlaylist) setSongToAddToPlaylist(null);
     if (setToastMessage) setToastMessage('Playlist berhasil dibuat!');
+
+    fetchAllUserData();
   };
-  
+
   const handleAcceptCollabRequest = async (req: any) => {
-  const { error } = await supabase
-    .from('playlists')
-    .update({ status: 'accepted' })
-    .eq('id', req.id);
+    const { error } = await supabase
+      .from('playlists')
+      .update({ status: 'accepted' })
+      .eq('id', req.id);
 
-  if (!error) {
-    fetchPlaylists();
-    if (setToastMessage) setToastMessage(`Berhasil bergabung ke playlist "${req.name || req.playlistName}"`);
-  }
-};
+    if (!error) {
+      fetchAllUserData();
+      if (setToastMessage) setToastMessage(`Berhasil bergabung ke playlist "${req.name || req.playlistName}"`);
+    }
+  };
 
-const handleRejectCollabRequest = async (req: any) => {
-  const { error } = await supabase
-    .from('playlists')
-    .update({ status: 'rejected' })
-    .eq('id', req.id);
+  const handleRejectCollabRequest = async (req: any) => {
+    const { error } = await supabase
+      .from('playlists')
+      .update({ status: 'rejected' })
+      .eq('id', req.id);
 
-  if (!error) {
-    fetchPlaylists();
-    if (setToastMessage) setToastMessage(`Menolak undangan kolaborasi`);
-  }
-};
-  
-  // --- INITIALIZATION EFFECTS ---
+    if (!error) {
+      fetchAllUserData();
+      if (setToastMessage) setToastMessage(`Menolak undangan kolaborasi`);
+    }
+  };
+
+  // --- 3. INITIALIZATION EFFECTS ---
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -277,15 +301,6 @@ const handleRejectCollabRequest = async (req: any) => {
     };
 
     initSession();
-
-    const savedHistory = JSON.parse(localStorage.getItem('icarus_history') || '[]');
-    setHistory(savedHistory);
-
-    const savedLikes = JSON.parse(localStorage.getItem('icarus_liked_ids') || '[]');
-    setLikedSongIds(savedLikes);
-    const savedLikedFull = JSON.parse(localStorage.getItem('icarus_liked_full') || '[]');
-    setLikedSongsList(savedLikedFull);
-
     loadHomepageData();
   }, []);
 
@@ -295,7 +310,7 @@ const handleRejectCollabRequest = async (req: any) => {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
-
+  
   useEffect(() => {
     if (currentTrack) {
       setLyrics(null);
