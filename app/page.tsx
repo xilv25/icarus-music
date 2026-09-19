@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createClient } from '@supabase/supabase-js';
 
-// --- IMPORT 13 KOMPONEN SESUAI NAMA FILE ASLI DI REPO ANDA ---
+// --- IMPORT 14 KOMPONEN SESUAI NAMA FILE ASLI DI REPO ANDA ---
 import AddToPlayListModal from '@/components/AddToPlayListModal';
 import AuthForm from '@/components/AuthForm';
 import FollowListModal from '@/components/FollowListModal';
@@ -18,6 +18,7 @@ import SongListCarousel from '@/components/SongListCarousel';
 import SongMenuModal from '@/components/SongMenuModal';
 import TrendingModal from '@/components/TrendingModal';
 import UserCardModal from '@/components/UserCardModal';
+import { CollabRequestsModal } from '@/components/CollabRequestsModal';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
