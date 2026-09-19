@@ -1,0 +1,9 @@
+{
+  "appId": "com.icarus.music",
+  "appName": "Icarus Music",
+  "webDir": "out",
+  "server": {
+    "url": "https://icarus-music-git-main-rikzs-projects.vercel.app",
+    "cleartext": true
+  }
+}
