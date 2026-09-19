@@ -30,8 +30,11 @@ jobs:
 
       - name: Build Next.js Web App
         run: |
+          # Buat folder out dan pastikan ada index.html minimal agar Capacitor tidak error
           mkdir -p out
-          echo "Icarus Music" > out/index.html
+          if [ ! -f "out/index.html" ]; then
+            echo "Icarus Music" > out/index.html
+          fi
 
       - name: Install Capacitor CLI & Android
         run: |
@@ -42,10 +45,10 @@ jobs:
           # 1. Tambahkan platform Android
           npx cap add android
 
-          # 2. HAPUS MainActivity.java bawaan Capacitor agar tidak konflik dengan kode Kotlin kita
+          # 2. Hapus MainActivity.java bawaan agar tidak konflik dengan Kotlin
           rm -f android/app/src/main/java/com/icarus/music/MainActivity.java
 
-          # 3. Timpa file dengan kode custom background player kita dari folder native-source
+          # 3. Timpa file dengan kode custom background player dari folder native-source
           if [ -d "native-source" ]; then
             mkdir -p android/app/src/main/java/com/icarus/music
             cp -f native-source/MainActivity.kt android/app/src/main/java/com/icarus/music/
@@ -53,6 +56,7 @@ jobs:
             cp -f native-source/AndroidManifest.xml android/app/src/main/
           fi
 
+          # 4. Jalankan sync setelah struktur siap
           npx cap sync android
 
       - name: Fix Namespace & Duplicate Kotlin Dependencies
