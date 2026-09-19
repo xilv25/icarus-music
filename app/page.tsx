@@ -827,34 +827,66 @@ const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
   const isSongLiked = (videoId: string) => likedSongIds.includes(videoId);
 
-  // MediaSession API untuk background playback & tombol media
-useEffect(() => {
-  if (!currentTrack || !('mediaSession' in navigator)) return;
+   // --- 1. useEffect untuk Foreground Service / Background Mode (Capacitor) ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const handleDeviceReady = () => {
+        const bgMode = (window as any).cordova?.plugins?.backgroundMode;
+        if (bgMode) {
+          bgMode.enable();
+          bgMode.setDefaults({
+            title: "Icarus Music",
+            text: "Memutar musik di latar belakang",
+            icon: "icon",
+            color: "#000000",
+            resume: true,
+            silent: true
+          });
+        }
+      };
 
-  // 1. Set Metadata Lagu ke Notifikasi HP
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: currentTrack.title || 'Unknown Title',
-    artist: currentTrack.artists?.[0]?.name || 'Unknown Artist',
-    artwork: [
-      {
-        src: currentTrack.thumbnail || getHighResCover(currentTrack.thumbnail),
-        sizes: '512x512',
-        type: 'image/jpeg',
-      },
-    ],
-  });
+      document.addEventListener('deviceready', handleDeviceReady, false);
 
-  // 2. Wajib Sync Status Play/Pause ke OS Android
-  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      // Fallback jika event deviceready terlewat
+      const bgMode = (window as any).cordova?.plugins?.backgroundMode;
+      if (bgMode) {
+        bgMode.enable();
+      }
 
-  // 3. Handler Tombol Media di Notifikasi
-  navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
-  navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
-  navigator.mediaSession.setActionHandler('previoustrack', handlePrev);
-  navigator.mediaSession.setActionHandler('nexttrack', handleNext);
-}, [currentTrack, isPlaying]); // <--- Wajib masukkan isPlaying di sini
+      return () => {
+        document.removeEventListener('deviceready', handleDeviceReady, false);
+      };
+    }
+  }, []);
 
-  // Trik Silent Audio Keep-Alive via tag <audio> di DOM (Solusi untuk APK Android)
+  // --- 2. MediaSession API untuk background playback & tombol media ---
+  useEffect(() => {
+    if (!currentTrack || !('mediaSession' in navigator)) return;
+
+    // 1. Set Metadata Lagu ke Notifikasi HP
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.title || 'Unknown Title',
+      artist: currentTrack.artists?.[0]?.name || 'Unknown Artist',
+      artwork: [
+        {
+          src: currentTrack.thumbnail || getHighResCover(currentTrack.thumbnail),
+          sizes: '512x512',
+          type: 'image/jpeg',
+        },
+      ],
+    });
+
+    // 2. Wajib Sync Status Play/Pause ke OS Android
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+    // 3. Handler Tombol Media di Notifikasi
+    navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
+    navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
+    navigator.mediaSession.setActionHandler('previoustrack', handlePrev);
+    navigator.mediaSession.setActionHandler('nexttrack', handleNext);
+  }, [currentTrack, isPlaying]); // <--- Wajib masukkan isPlaying di sini
+
+  // --- 3. Trik Silent Audio Keep-Alive via tag <audio> di DOM (Solusi untuk APK Android) ---
   useEffect(() => {
     if (silentAudioRef.current) {
       if (isPlaying) {
